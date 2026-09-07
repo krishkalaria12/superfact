@@ -907,8 +907,11 @@
                   </tr>
                   <tr>
                     <td>Models</td>
-                    <td>GPT-5.6 Luna; GPT-5.6 Terra; Terra high</td>
-                    <td>Bulk extraction; pair adjudication; the contradiction second pass only</td>
+                    <td>GPT-5.6 Luna; GPT-5.6 Terra; Terra high; text-embedding-3-small</td>
+                    <td>
+                      Bulk extraction; pair adjudication; the contradiction second pass only;
+                      subject and predicate vectors for retrieval
+                    </td>
                     <td>Escalation is triggered by one condition, not by a general risk score</td>
                   </tr>
                   <tr>
@@ -1187,6 +1190,12 @@
                         <li>
                           Index document, page, subject, predicate, and job status; add the pgvector
                           column on assertions.
+                        </li>
+                        <li>
+                          Embeddings are <code>text-embedding-3-small</code> at its full 1536
+                          dimensions, so the column is <code>vector(1536)</code>. The dimension is
+                          fixed at schema time and changing it re-embeds every assertion, so it is
+                          decided here rather than at phase 06.
                         </li>
                       </ul>
                     </div>

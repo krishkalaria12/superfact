@@ -61,6 +61,11 @@ of the package in the tree yields two incompatible sets of column types.
 An environment variable is required only from the phase that first reads it, so a fresh clone runs
 on `DATABASE_URL` alone. `apps/web/.env.example` records which phase claims each one.
 
+Embeddings are `text-embedding-3-small` at 1536 dimensions, over subject and predicate text only.
+They serve retrieval in candidate pairing and nothing else: a verdict never rests on similarity, and
+numbers never go through vectors — ₹7,225 crore and ₹72.25 billion are a coin flip in vector space.
+The dimension is fixed in the schema, so changing the model means a migration and a full re-embed.
+
 Files live in UploadThing. It assigns its own `{uuid}_{filename}` key and will not take a path, so
 anything a stage may re-upload needs a `customId` derived from content hash and page index —
 otherwise a retry orphans a duplicate instead of overwriting. This replaced Vercel Blob after the

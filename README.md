@@ -20,6 +20,7 @@ visible in both the database and the logs. Parsing, extraction, and adjudication
 | App     | Next.js App Router, TypeScript                                                       |
 | Parsing | MuPDF.js (`mupdf`, WASM). Structured text, geometry, page rasters                    |
 | Models  | GPT-5.6 Luna (extraction), Terra (adjudication), Terra high (contradiction re-check) |
+| Vectors | `text-embedding-3-small` at 1536 dimensions, over subject and predicate text only    |
 | Jobs    | Inngest. Stages: parse, extract, relate                                              |
 | Logs    | evlog. One wide event per request, drained to `.evlog/logs` as NDJSON                |
 | Data    | Neon PostgreSQL + pgvector, Drizzle ORM                                              |
