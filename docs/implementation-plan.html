@@ -1,0 +1,1972 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Implementation plan for Superfact, an evidence-first fact knowledge layer."
+    />
+    <title>Superfact — Implementation Plan</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --canvas: #edf3f5;
+        --paper: #fbfdfd;
+        --paper-strong: #ffffff;
+        --ink: #152127;
+        --muted: #52646d;
+        --faint: #76858c;
+        --line: #cbd7dc;
+        --line-strong: #9eb0b8;
+        --accent: #1f62a2;
+        --accent-soft: #e4eff8;
+        --good: #1f7058;
+        --good-soft: #e2f1eb;
+        --warn: #925b12;
+        --warn-soft: #f8ecd7;
+        --danger: #9d3542;
+        --danger-soft: #f8e5e8;
+        --code: #e9eff1;
+        --shadow: 0 18px 48px rgba(29, 50, 59, 0.1);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          color-scheme: dark;
+          --canvas: #0e171b;
+          --paper: #131f24;
+          --paper-strong: #18272d;
+          --ink: #e5edf0;
+          --muted: #a5b6bd;
+          --faint: #81939b;
+          --line: #2d414a;
+          --line-strong: #49616b;
+          --accent: #72b8fb;
+          --accent-soft: #183651;
+          --good: #68c5a4;
+          --good-soft: #17382f;
+          --warn: #e5ad57;
+          --warn-soft: #3b2b17;
+          --danger: #ef8c98;
+          --danger-soft: #43232a;
+          --code: #1b2b32;
+          --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+        }
+      }
+
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --canvas: #0e171b;
+        --paper: #131f24;
+        --paper-strong: #18272d;
+        --ink: #e5edf0;
+        --muted: #a5b6bd;
+        --faint: #81939b;
+        --line: #2d414a;
+        --line-strong: #49616b;
+        --accent: #72b8fb;
+        --accent-soft: #183651;
+        --good: #68c5a4;
+        --good-soft: #17382f;
+        --warn: #e5ad57;
+        --warn-soft: #3b2b17;
+        --danger: #ef8c98;
+        --danger-soft: #43232a;
+        --code: #1b2b32;
+        --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+      }
+
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --canvas: #edf3f5;
+        --paper: #fbfdfd;
+        --paper-strong: #ffffff;
+        --ink: #152127;
+        --muted: #52646d;
+        --faint: #76858c;
+        --line: #cbd7dc;
+        --line-strong: #9eb0b8;
+        --accent: #1f62a2;
+        --accent-soft: #e4eff8;
+        --good: #1f7058;
+        --good-soft: #e2f1eb;
+        --warn: #925b12;
+        --warn-soft: #f8ecd7;
+        --danger: #9d3542;
+        --danger-soft: #f8e5e8;
+        --code: #e9eff1;
+        --shadow: 0 18px 48px rgba(29, 50, 59, 0.1);
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family:
+          ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        font-size: 16px;
+        line-height: 1.62;
+      }
+
+      button,
+      a {
+        -webkit-tap-highlight-color: transparent;
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 0.18em;
+      }
+      a:hover {
+        text-decoration-thickness: 2px;
+      }
+      :focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 3px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        font-family: Charter, "Bitstream Charter", Georgia, serif;
+        font-weight: 650;
+        line-height: 1.12;
+        text-wrap: balance;
+      }
+      h1 {
+        max-width: 14ch;
+        font-size: clamp(2.65rem, 7vw, 5.4rem);
+        letter-spacing: -0.04em;
+      }
+      h2 {
+        font-size: clamp(1.8rem, 4vw, 2.7rem);
+        letter-spacing: -0.025em;
+      }
+      h3 {
+        font-size: 1.2rem;
+      }
+      p {
+        margin: 0;
+        max-width: 68ch;
+      }
+      ul,
+      ol {
+        margin: 0;
+        padding-left: 1.25rem;
+      }
+      li + li {
+        margin-top: 0.35rem;
+      }
+      code,
+      pre,
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      code {
+        padding: 0.12em 0.35em;
+        border-radius: 0.25rem;
+        background: var(--code);
+        font-size: 0.9em;
+      }
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+      }
+
+      .skip-link {
+        position: fixed;
+        z-index: 100;
+        top: 0.75rem;
+        left: 0.75rem;
+        transform: translateY(-180%);
+        padding: 0.7rem 1rem;
+        background: var(--ink);
+        color: var(--paper);
+      }
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .page-shell {
+        width: min(1440px, calc(100% - 2rem));
+        margin: 1rem auto;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        min-height: 4rem;
+        padding: 0.8rem clamp(1rem, 3vw, 2.5rem);
+        border-bottom: 1px solid var(--line);
+      }
+      .wordmark {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        font-weight: 750;
+      }
+      .wordmark small {
+        color: var(--muted);
+        font-weight: 500;
+      }
+      .theme-button {
+        border: 1px solid var(--line-strong);
+        border-radius: 999px;
+        padding: 0.45rem 0.8rem;
+        background: var(--paper-strong);
+        color: var(--ink);
+        font: inherit;
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.6fr);
+        gap: clamp(2rem, 6vw, 6rem);
+        padding: clamp(3rem, 8vw, 7rem) clamp(1rem, 6vw, 6.5rem);
+        border-bottom: 1px solid var(--line);
+      }
+      .eyebrow {
+        color: var(--accent);
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+      }
+      .hero-copy {
+        display: grid;
+        align-content: start;
+        gap: 1.4rem;
+      }
+      .hero-copy .lede {
+        max-width: 54ch;
+        color: var(--muted);
+        font-size: clamp(1.05rem, 2vw, 1.3rem);
+      }
+      .hero-note {
+        align-self: end;
+        display: grid;
+        gap: 1rem;
+        padding-top: 1.25rem;
+        border-top: 3px solid var(--accent);
+      }
+      .hero-note strong {
+        font-family: Charter, Georgia, serif;
+        font-size: 1.35rem;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        align-items: start;
+      }
+      .index {
+        position: sticky;
+        top: 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        padding: 2rem 1.5rem;
+        border-right: 1px solid var(--line);
+      }
+      .index-title {
+        margin-bottom: 1rem;
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      .index ol {
+        list-style: none;
+        padding: 0;
+      }
+      .index li + li {
+        margin-top: 0.15rem;
+      }
+      .index a {
+        display: grid;
+        grid-template-columns: 2.2rem 1fr;
+        gap: 0.35rem;
+        padding: 0.38rem 0;
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.84rem;
+        line-height: 1.35;
+      }
+      .index a:hover {
+        color: var(--ink);
+      }
+      .index .num {
+        color: var(--accent);
+        font-family: ui-monospace, monospace;
+      }
+
+      main {
+        min-width: 0;
+        padding: clamp(2.5rem, 6vw, 6rem);
+      }
+      .section {
+        display: grid;
+        gap: 1.5rem;
+        scroll-margin-top: 1.5rem;
+      }
+      .section + .section {
+        margin-top: clamp(5rem, 10vw, 9rem);
+      }
+      .section-kicker {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        color: var(--accent);
+      }
+      .section-kicker::after {
+        content: "";
+        height: 1px;
+        flex: 1;
+        background: var(--line);
+      }
+      .section-intro {
+        color: var(--muted);
+        font-size: 1.08rem;
+      }
+
+      .decision-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        background: var(--line);
+      }
+      .decision {
+        display: grid;
+        gap: 0.35rem;
+        min-height: 7rem;
+        padding: 1.1rem;
+        background: var(--paper-strong);
+      }
+      .decision dt {
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .decision dd {
+        margin: 0;
+        font-weight: 650;
+      }
+
+      .flow-wrap {
+        overflow-x: auto;
+        padding-bottom: 0.5rem;
+      }
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(10, minmax(118px, 1fr));
+        min-width: 1180px;
+        border: 1px solid var(--line);
+        background: var(--paper-strong);
+      }
+      .flow-step {
+        position: relative;
+        padding: 1rem 0.8rem 1.2rem;
+        border-right: 1px solid var(--line);
+      }
+      .flow-step:last-child {
+        border-right: 0;
+      }
+      .flow-step .mono {
+        display: block;
+        margin-bottom: 0.45rem;
+        color: var(--accent);
+        font-size: 0.73rem;
+      }
+      .flow-step strong {
+        display: block;
+        line-height: 1.25;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+      }
+      table {
+        width: 100%;
+        min-width: 720px;
+        border-collapse: collapse;
+        font-size: 0.92rem;
+      }
+      th,
+      td {
+        padding: 0.8rem 0.9rem;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+        text-align: left;
+      }
+      th {
+        background: var(--accent-soft);
+        color: var(--ink);
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .phase-list {
+        display: grid;
+        gap: 3rem;
+      }
+      .phase {
+        display: grid;
+        grid-template-columns: minmax(105px, 0.22fr) minmax(0, 1fr);
+        gap: clamp(1.25rem, 4vw, 3.5rem);
+        padding-top: 2rem;
+        border-top: 1px solid var(--line-strong);
+        scroll-margin-top: 1.5rem;
+      }
+      .phase-marker {
+        display: grid;
+        align-content: start;
+        gap: 0.4rem;
+      }
+      .phase-marker .number {
+        font-family: Charter, Georgia, serif;
+        font-size: 3.4rem;
+        line-height: 0.9;
+        color: var(--accent);
+      }
+      .phase-marker .depends {
+        color: var(--faint);
+        font-size: 0.73rem;
+        line-height: 1.4;
+      }
+      .phase-body {
+        display: grid;
+        gap: 1.25rem;
+        min-width: 0;
+      }
+      .phase-goal {
+        color: var(--muted);
+        font-size: 1.02rem;
+      }
+      .work-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.5rem 2.5rem;
+      }
+      .work-block {
+        display: grid;
+        align-content: start;
+        gap: 0.65rem;
+      }
+      .work-block h4 {
+        margin: 0;
+        font-size: 0.73rem;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+      }
+      .work-block ul {
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+      .acceptance {
+        padding: 1rem 1.1rem;
+        border-left: 4px solid var(--good);
+        background: var(--good-soft);
+      }
+      .acceptance strong {
+        display: block;
+        margin-bottom: 0.4rem;
+        color: var(--good);
+      }
+      .risk {
+        padding: 1rem 1.1rem;
+        border-left: 4px solid var(--warn);
+        background: var(--warn-soft);
+      }
+      .risk strong {
+        color: var(--warn);
+      }
+
+      .schema {
+        display: grid;
+        gap: 0.75rem;
+        padding: 1.25rem;
+        overflow-x: auto;
+        background: var(--code);
+        border: 1px solid var(--line);
+        font-size: 0.82rem;
+        line-height: 1.55;
+      }
+      .schema .comment {
+        color: var(--muted);
+      }
+
+      .callout {
+        display: grid;
+        gap: 0.6rem;
+        padding: 1.25rem;
+        border: 1px solid var(--line-strong);
+        background: var(--paper-strong);
+      }
+      .callout.danger {
+        border-color: var(--danger);
+        background: var(--danger-soft);
+      }
+      .callout.danger h3 {
+        color: var(--danger);
+      }
+
+      details {
+        border-top: 1px solid var(--line);
+      }
+      details:last-child {
+        border-bottom: 1px solid var(--line);
+      }
+      summary {
+        padding: 1rem 0;
+        cursor: pointer;
+        font-weight: 750;
+      }
+      details > div {
+        display: grid;
+        gap: 0.75rem;
+        padding: 0 0 1.25rem;
+        color: var(--muted);
+      }
+
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 1.5rem;
+        padding: 2rem clamp(1rem, 6vw, 6.5rem);
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      @media (max-width: 900px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        .index {
+          position: static;
+          max-height: none;
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+        .index ol {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 0.25rem 1rem;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .page-shell {
+          width: 100%;
+          margin: 0;
+          border: 0;
+        }
+        .topbar {
+          align-items: flex-start;
+        }
+        .wordmark {
+          display: grid;
+          gap: 0;
+        }
+        .hero {
+          padding-block: 3.5rem;
+        }
+        .index ol {
+          grid-template-columns: 1fr;
+        }
+        main {
+          padding-inline: 1rem;
+        }
+        .decision-grid,
+        .work-grid {
+          grid-template-columns: 1fr;
+        }
+        .phase {
+          grid-template-columns: 1fr;
+          gap: 1rem;
+        }
+        .phase-marker {
+          grid-template-columns: auto 1fr;
+          align-items: end;
+        }
+        .phase-marker .number {
+          font-size: 2.7rem;
+        }
+        .phase-marker .depends {
+          padding-bottom: 0.2rem;
+        }
+        .footer {
+          flex-direction: column;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+
+      @media print {
+        :root {
+          --canvas: #fff;
+          --paper: #fff;
+          --paper-strong: #fff;
+          --ink: #111;
+          --muted: #333;
+          --line: #bbb;
+          --accent: #174f80;
+        }
+        .page-shell {
+          width: 100%;
+          margin: 0;
+          border: 0;
+          box-shadow: none;
+        }
+        .theme-button,
+        .skip-link,
+        .index {
+          display: none;
+        }
+        .layout {
+          display: block;
+        }
+        main {
+          padding: 2rem 0;
+        }
+        .phase {
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to plan</a>
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="wordmark">
+          <span>Superfact</span>
+          <small>Fact Knowledge Layer</small>
+        </div>
+        <button
+          class="theme-button"
+          id="theme-toggle"
+          type="button"
+          aria-label="Change color theme"
+        >
+          Theme: Light
+        </button>
+      </header>
+
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Implementation plan · revision 2</p>
+          <h1 id="page-title">Build the evidence before the answer.</h1>
+          <p class="lede">
+            A phased plan for an evidence-first Fact Diff engine that extracts atomic assertions
+            from PDFs, keeps every assertion bound to the exact region it came from, and
+            distinguishes corroboration, contradiction, and contextual reconciliation from cases it
+            cannot safely decide.
+          </p>
+        </div>
+        <aside class="hero-note" aria-label="Product promise">
+          <strong>Product promise</strong>
+          <p>
+            Upload documents. Receive precise claims with context and source evidence. See what
+            agrees, what conflicts, what only appears to conflict, and what the system declined to
+            judge.
+          </p>
+          <p class="mono">
+            English text-layer PDFs · one TypeScript runtime · reviewer-focused demo
+          </p>
+        </aside>
+      </section>
+
+      <div class="layout">
+        <nav class="index" aria-label="Plan index">
+          <p class="index-title">Plan index</p>
+          <ol>
+            <li>
+              <a href="#north-star"><span class="num">A</span><span>North star</span></a>
+            </li>
+            <li>
+              <a href="#architecture"><span class="num">B</span><span>Architecture</span></a>
+            </li>
+            <li>
+              <a href="#contracts"><span class="num">C</span><span>Core contracts</span></a>
+            </li>
+            <li>
+              <a href="#phase-0"><span class="num">00</span><span>Baseline</span></a>
+            </li>
+            <li>
+              <a href="#phase-1"><span class="num">01</span><span>Domain model</span></a>
+            </li>
+            <li>
+              <a href="#phase-2"><span class="num">02</span><span>Upload &amp; jobs</span></a>
+            </li>
+            <li>
+              <a href="#phase-3"><span class="num">03</span><span>Parsing &amp; tables</span></a>
+            </li>
+            <li>
+              <a href="#phase-4"><span class="num">04</span><span>Extraction</span></a>
+            </li>
+            <li>
+              <a href="#phase-5"><span class="num">05</span><span>Grounding gate</span></a>
+            </li>
+            <li>
+              <a href="#phase-6"><span class="num">06</span><span>Pairing</span></a>
+            </li>
+            <li>
+              <a href="#phase-7"><span class="num">07</span><span>Adjudication</span></a>
+            </li>
+            <li>
+              <a href="#phase-8"><span class="num">08</span><span>Speed &amp; reuse</span></a>
+            </li>
+            <li>
+              <a href="#phase-9"><span class="num">09</span><span>Inspection UI</span></a>
+            </li>
+            <li>
+              <a href="#phase-10"><span class="num">10</span><span>Four cases &amp; demo</span></a>
+            </li>
+            <li>
+              <a href="#risks"><span class="num">D</span><span>Risk register</span></a>
+            </li>
+          </ol>
+        </nav>
+
+        <main id="main">
+          <section class="section" id="north-star">
+            <div class="section-kicker"><span class="eyebrow">A · North star</span></div>
+            <h2>A small system whose behavior is clear.</h2>
+            <p class="section-intro">
+              The assignment states it plainly: a smaller, understandable prototype beats a large
+              system whose behavior is unclear. So the system publishes fewer claims when necessary,
+              never severs evidence from an assertion, and treats &ldquo;cannot safely
+              determine&rdquo; as a valid result. The work is backend-heavy; the interface exists to
+              make that behavior inspectable in seconds.
+            </p>
+
+            <dl class="decision-grid">
+              <div class="decision">
+                <dt>Primary experience</dt>
+                <dd>Evidence-first Fact Diff, not generic PDF chat</dd>
+              </div>
+              <div class="decision">
+                <dt>Truth boundary</dt>
+                <dd>Uploaded documents only; no web evidence</dd>
+              </div>
+              <div class="decision">
+                <dt>Priority order</dt>
+                <dd>Precision &gt; recall &gt; latency</dd>
+              </div>
+              <div class="decision">
+                <dt>Comparison scope</dt>
+                <dd>Within a PDF and across PDFs</dd>
+              </div>
+              <div class="decision">
+                <dt>Document scope</dt>
+                <dd>English PDFs with a text layer; scans refused explicitly</dd>
+              </div>
+              <div class="decision">
+                <dt>Working envelope</dt>
+                <dd>Six starter PDFs, roughly 511 pages</dd>
+              </div>
+              <div class="decision">
+                <dt>Runtime</dt>
+                <dd>One TypeScript process; no second language or service</dd>
+              </div>
+              <div class="decision">
+                <dt>Explicit exclusions</dt>
+                <dd>Auth, tenancy, OCR, accuracy metrics, benchmark evaluation</dd>
+              </div>
+            </dl>
+
+            <div class="callout">
+              <h3>On accuracy claims</h3>
+              <p>
+                There is no labelled gold set and no measured accuracy figure anywhere in this plan.
+                Building one over 511 pages would consume the schedule and still cover a single
+                document family. Quality is instead pursued through mechanisms that hold without
+                measurement: a deterministic verbatim-evidence gate, a context-completeness gate
+                before publication, and a second adjudication pass reserved for contradictions.
+              </p>
+              <p>
+                Tuning happens by reading system output against the six starter PDFs. The README
+                says exactly this under <em>Limitations</em>. An unmeasurable number in a submission
+                is a question the reviewer will ask and the author cannot answer.
+              </p>
+            </div>
+
+            <div class="callout">
+              <h3>Definition of done</h3>
+              <p>
+                A new, unseen English PDF enters through the upload API and produces grounded
+                assertions, context, evidence, and relationships with no document-specific rules, no
+                hard-coded filenames, and no predicate allowlist. The supplied PDFs demonstrate
+                corroboration, a likely contradiction, a contextual reconciliation, and one real
+                failure the system handled honestly.
+              </p>
+            </div>
+          </section>
+
+          <section class="section" id="architecture">
+            <div class="section-kicker"><span class="eyebrow">B · Architecture</span></div>
+            <h2>One runtime, one coordinate space.</h2>
+            <p class="section-intro">
+              Revision 1 ran a Python parsing service on Modal and rendered evidence with PDF.js in
+              the browser &mdash; two compute planes and two coordinate systems. MuPDF.js is the
+              same C engine PyMuPDF wraps, compiled to WebAssembly and published to npm, so parsing
+              collapses into the Next.js process. Because it also rasterizes pages, the highlight
+              overlay reads the same coordinates the parser emitted.
+            </p>
+
+            <div class="flow-wrap" aria-label="Processing pipeline">
+              <div
+                class="flow"
+                style="grid-template-columns: repeat(8, minmax(130px, 1fr)); min-width: 1040px"
+              >
+                <div class="flow-step"><span class="mono">01</span><strong>Upload</strong></div>
+                <div class="flow-step">
+                  <span class="mono">02</span><strong>Parse &amp; render</strong>
+                </div>
+                <div class="flow-step">
+                  <span class="mono">03</span><strong>Extract assertions</strong>
+                </div>
+                <div class="flow-step">
+                  <span class="mono">04</span><strong>Ground evidence</strong>
+                </div>
+                <div class="flow-step">
+                  <span class="mono">05</span><strong>Pair candidates</strong>
+                </div>
+                <div class="flow-step"><span class="mono">06</span><strong>Adjudicate</strong></div>
+                <div class="flow-step"><span class="mono">07</span><strong>Publish</strong></div>
+                <div class="flow-step"><span class="mono">08</span><strong>Inspect</strong></div>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Layer</th>
+                    <th>Choice</th>
+                    <th>Responsibility</th>
+                    <th>Boundary</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Product</td>
+                    <td>Next.js App Router, TypeScript</td>
+                    <td>API, UI, server actions, result projection</td>
+                    <td>Single deployable; no companion service</td>
+                  </tr>
+                  <tr>
+                    <td>Parsing</td>
+                    <td><code>mupdf</code> (MuPDF.js, WASM)</td>
+                    <td>Structured text with per-line geometry, vector rules, page raster</td>
+                    <td>Runs in-process inside a job step</td>
+                  </tr>
+                  <tr>
+                    <td>AI</td>
+                    <td>AI SDK v7 + Structured Outputs</td>
+                    <td>Extraction, adjudication</td>
+                    <td>All prompts and schemas versioned in TypeScript</td>
+                  </tr>
+                  <tr>
+                    <td>Models</td>
+                    <td>GPT-5.6 Luna; GPT-5.6 Terra; Terra high</td>
+                    <td>Bulk extraction; pair adjudication; the contradiction second pass only</td>
+                    <td>Escalation is triggered by one condition, not by a general risk score</td>
+                  </tr>
+                  <tr>
+                    <td>Jobs</td>
+                    <td>Inngest</td>
+                    <td>Three durable stages with retries and bounded fan-out</td>
+                    <td>Each stage idempotent on content hash</td>
+                  </tr>
+                  <tr>
+                    <td>Storage</td>
+                    <td>Neon PostgreSQL + pgvector</td>
+                    <td>Documents, pages, assertions, edges, jobs</td>
+                    <td>Single canonical database; no dual writes</td>
+                  </tr>
+                  <tr>
+                    <td>Files</td>
+                    <td>Vercel Blob</td>
+                    <td>Original PDF bytes and rendered page images</td>
+                    <td>Metadata copied into Neon on completion</td>
+                  </tr>
+                  <tr>
+                    <td>Interface</td>
+                    <td>Tailwind, shadcn/ui, page PNG + positioned overlays</td>
+                    <td>Progress, fact list, relationship filters, evidence highlights</td>
+                    <td>No chat or graph until the core is proven</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout">
+              <h3>Why the viewer renders images, not PDFs</h3>
+              <p>
+                The parser already produces a page raster and the bounding box of every line it
+                read. Showing that raster with absolutely positioned highlight divs means the box
+                drawn on screen is the box the parser emitted, scaled &mdash; no transform between
+                two libraries&rsquo; conventions, which was the highest-ranked risk in revision 1.
+                It also avoids shipping a 3&nbsp;MB PDF to the client and parsing it there. The cost
+                is losing text selection in the viewer, which an evidence inspector does not need.
+              </p>
+            </div>
+          </section>
+
+          <section class="section" id="contracts">
+            <div class="section-kicker"><span class="eyebrow">C · Core contracts</span></div>
+            <h2>Keep assertions immutable; let interpretations evolve.</h2>
+            <p class="section-intro">
+              The central modeling decision survives from revision 1: separate what a document said
+              from the system&rsquo;s interpretation of agreement or conflict. What changed is the
+              surface area around it &mdash; five tables instead of thirteen, four verdicts instead
+              of seven, and no entity-resolution tier.
+            </p>
+
+            <pre
+              class="schema"
+              aria-label="Core data contract"
+            ><span><strong>Assertion</strong> {</span>
+<span>  documentId, page,</span>
+<span>  subject, predicate, rawValue, canonicalValue, unit,</span>
+<span>  qualifiers: JSONB,          <span class="comment">// keys discovered per document, not fixed by schema</span></span>
+<span>  modality: observed | projected,</span>
+<span>  attributedTo: string | null, <span class="comment">// set when the document credits another source</span></span>
+<span>  evidence: { quote, bbox, lineIds },</span>
+<span>  verified: boolean,           <span class="comment">// quote found verbatim in the stored page text</span></span>
+<span>  contextComplete: boolean,    <span class="comment">// carries the qualifiers its predicate requires</span></span>
+<span>  pipelineVersion</span>
+<span>}</span>
+<span class="comment">// Every document occurrence stays a separate immutable row, even when wording matches.</span>
+
+<span><strong>ClaimEdge</strong> {</span>
+<span>  sourceAssertionId, targetAssertionId,</span>
+<span>  verdict: corroborates | contradicts | reconciles | insufficient,</span>
+<span>  reasonCode, matchedFields, mismatchedFields, explanation, confidence</span>
+<span>}</span>
+<span class="comment">// reasonCode carries the nuance the old seven-verdict enum tried to encode:</span>
+<span class="comment">// time_supersession, unit_mismatch, scope_mismatch, vintage_difference,</span>
+<span class="comment">// projection_vs_actual, exact_duplicate, missing_context.</span></pre>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Decision</th>
+                    <th>Revision 1</th>
+                    <th>Now</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Tables</td>
+                    <td>13</td>
+                    <td>5 &mdash; documents, pages, assertions, edges, jobs</td>
+                    <td>
+                      Evidence is one span per assertion, so a join table bought nothing; clusters
+                      restate what edges already say
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Verdicts</td>
+                    <td>7</td>
+                    <td>4, plus <code>reasonCode</code></td>
+                    <td>
+                      No training signal for fine classes; every extra label costs precision on the
+                      three the assignment names
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Modality</td>
+                    <td>5 values</td>
+                    <td>2 values + <code>attributedTo</code></td>
+                    <td>
+                      &ldquo;GDP will be 6.5%&rdquo; and &ldquo;RBI forecasts 6.5%&rdquo; share a
+                      modality and differ in attribution &mdash; a field expresses that better than
+                      an enum
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Entity identity</td>
+                    <td>Entities, aliases, versioned predicate registry</td>
+                    <td>Embedded subject strings; identity decided at adjudication</td>
+                    <td>
+                      An evidence-bound judgement that two mentions match <em>is</em> the
+                      resolution, and it explains itself
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Confidence</td>
+                    <td>4 components + calibrated thresholds</td>
+                    <td>2 deterministic booleans + 1 model score</td>
+                    <td>Thresholds cannot be calibrated without labelled data</td>
+                  </tr>
+                  <tr>
+                    <td>Versioning</td>
+                    <td>5 stamps per assertion</td>
+                    <td>One <code>pipelineVersion</code> string</td>
+                    <td>Enough to invalidate caches; the rest was bookkeeping</td>
+                  </tr>
+                  <tr>
+                    <td>Derived facts</td>
+                    <td>Formula + calculation trace tier</td>
+                    <td>Removed</td>
+                    <td>The assignment asks about corroboration and conflict, not arithmetic</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>User-facing result</th>
+                    <th>Required contents</th>
+                    <th>Must not include</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Published fact</td>
+                    <td>Assertion, evidence quote, highlight box, qualifiers</td>
+                    <td>Unsupported completion or hidden normalization</td>
+                  </tr>
+                  <tr>
+                    <td>Contradiction</td>
+                    <td>
+                      Both assertions, both highlights, proof that decisive context matches, caveats
+                    </td>
+                    <td>A verdict resting on vector similarity alone</td>
+                  </tr>
+                  <tr>
+                    <td>Denied contradiction</td>
+                    <td>
+                      The pair, <code>reconciles</code> or <code>insufficient</code>, the decisive
+                      qualifier
+                    </td>
+                    <td>Raw chain-of-thought</td>
+                  </tr>
+                  <tr>
+                    <td>Failure</td>
+                    <td>Failed page or stage, coverage counts, reason, proposed repair</td>
+                    <td>A whole-document success claim</td>
+                  </tr>
+                  <tr>
+                    <td>Export</td>
+                    <td>Facts, evidence, qualifiers, edges, failures, pipeline version</td>
+                    <td>Operational noise better kept in logs</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section" aria-labelledby="phases-title">
+            <div class="section-kicker"><span class="eyebrow">Implementation sequence</span></div>
+            <h2 id="phases-title">Build through vertical evidence slices.</h2>
+            <p class="section-intro">
+              Each phase exits with an inspectable artifact. A phase may begin when its stated
+              dependency is stable. Eleven phases, and the two that carried the most weight in
+              revision 1 &mdash; the parsing service and the evaluation harness &mdash; are gone
+              entirely.
+            </p>
+
+            <div class="phase-list">
+              <article class="phase" id="phase-0">
+                <div class="phase-marker">
+                  <span class="number">00</span
+                  ><span class="depends">Dependency: existing monorepo</span>
+                </div>
+                <div class="phase-body">
+                  <h3>Baseline and operating contract</h3>
+                  <p class="phase-goal">
+                    Make the confirmed decisions executable without spending time on infrastructure
+                    the assignment does not judge.
+                  </p>
+                  <div class="work-grid">
+                    <div class="work-block">
+                      <h4>Build</h4>
+                      <ul>
+                        <li>
+                          Wire the existing Turborepo workspaces: <code>apps/web</code>,
+                          <code>packages/db</code>, <code>packages/env</code>.
+                        </li>
+                        <li>
+                          Define environment contracts for the model provider, Neon, Vercel Blob,
+                          and Inngest.
+                        </li>
+                        <li>One local command runs Next.js and the Inngest dev server together.</li>
+                        <li>Structured logs carrying job ID and stage name.</li>
+                      </ul>
+                    </div>
+                    <div class="work-block">
+                      <h4>Freeze</h4>
+                      <ul>
+                        <li>English text-layer PDFs; reviewer-only deployment.</li>
+                        <li>No auth, tenancy, retention workflow, or external tracing platform.</li>
+                        <li>No Python service, Modal, Docling, OCR, Neo4j, Pinecone, or Mastra.</li>
+                        <li>No accuracy metrics, benchmark datasets, or gold-set harness.</li>
+                        <li>
+                          No hard-coded facts, filenames, predicates, or document-specific branches.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="acceptance">
+                    <strong>Exit check</strong>A sample job moves through placeholder stages
+                    locally, with one job ID visible in both the database and the logs. Deployment
+                    is deliberately deferred to phase 10.
+                  </div>
+                </div>
+              </article>
+
+              <article class="phase" id="phase-1">
+                <div class="phase-marker">
+                  <span class="number">01</span><span class="depends">Depends on 00</span>
+                </div>
+                <div class="phase-body">
+                  <h3>Domain model and contracts</h3>
+                  <p class="phase-goal">
+                    Define the stable envelope that lets unfamiliar domains extend context without
+                    making comparisons meaningless.
+                  </p>
+                  <div class="work-grid">
+                    <div class="work-block">
+                      <h4>Data model</h4>
+                      <ul>
+                        <li>Five tables: documents, pages, assertions, edges, jobs.</li>
+                        <li>
+                          Fixed typed columns for identity, value, unit, modality, attribution, and
+                          evidence; JSONB for qualifiers.
+                        </li>
+                        <li>
+                          Keep assertion occurrences separate even when wording and canonical value
+                          match.
+                        </li>
+                        <li>
+                          Index document, page, subject, predicate, and job status; add the pgvector
+                          column on assertions.
+                        </li>
+                      </ul>
+                    </div>
+                    <div class="work-block">
+                      <h4>Contracts</h4>
+                      <ul>
+                        <li>
+                          Zod schemas for parsed pages, assertion candidates, published assertions,
+                          edges, and the JSON export.
+                        </li>
+                        <li>Stable reason codes rather than prose-only decisions.</li>
+                        <li>Two publication states: published, or rejected with a reason.</li>
+                        <li>
+                          A single <code>pipelineVersion</code> string stamped on every assertion.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="acceptance">
+                    <strong>Exit check</strong>A hand-written assertion round-trips through storage
+                    and JSON export without losing raw value, canonical value, evidence, qualifiers,
+                    modality, or attribution.
+                  </div>
+                </div>
+              </article>
+
+              <article class="phase" id="phase-2">
+                <div class="phase-marker">
+                  <span class="number">02</span><span class="depends">Depends on 01</span>
+                </div>
+                <div class="phase-body">
+                  <h3>Upload and durable job skeleton</h3>
+                  <p class="phase-goal">
+                    Turn an uploaded file into an idempotent, progressive processing run.
+                  </p>
+                  <div class="work-grid">
+                    <div class="work-block">
+                      <h4>Upload boundary</h4>
+                      <ul>
+                        <li>
+                          Accept PDFs through a route handler into Vercel Blob; persist key, URL,
+                          checksum, size, and original filename in Neon.
+                        </li>
+                        <li>
+                          Hash content before expensive work and reuse completed artifacts for
+                          duplicate files.
+                        </li>
+                        <li>
+                          Validate that the file opens; report encrypted or corrupted documents as
+                          explicit failures.
+                        </li>
+                        <li>
+                          Detect a missing text layer and refuse the document with a clear
+                          <code>scanned_unsupported</code> reason rather than half-parsing it.
+                        </li>
+                      </ul>
+                    </div>
+                    <div class="work-block">
+                      <h4>Job model</h4>
+                      <ul>
+                        <li>Emit an Inngest event after the document row commits.</li>
+                        <li>Three stages: parse, extract, relate.</li>
+                        <li>
+                          Make every stage safe to retry using job ID, content hash, and pipeline
+                          version.
+                        </li>
+                        <li>
+                          Expose job status and per-page coverage through read-only endpoints.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="acceptance">
+                    <strong>Exit check</strong>Uploading the same file twice does not duplicate
+                    expensive work; retries do not duplicate assertions or edges; partial and failed
+                    states stay visible.
+                  </div>
+                </div>
+              </article>
+
+              <article class="phase" id="phase-3">
+                <div class="phase-marker">
+                  <span class="number">03</span><span class="depends">Depends on 02</span>
+                </div>
+                <div class="phase-body">
+                  <h3>Parsing, table reconstruction, page rasters</h3>
+                  <p class="phase-goal">
+                    Recover text, geometry, reading order, and table structure in one library, and
+                    produce the images the evidence viewer will highlight.
+                  </p>
+                  <div class="work-grid">
+                    <div class="work-block">
+                      <h4>Structured text</h4>
+                      <ul>
+                        <li>
+                          Open each PDF with MuPDF.js; take <code>toStructuredText</code> per page
+                          for blocks, lines, and per-line bounding boxes.
+                        </li>
+                        <li>
+                          Render each page with <code>toPixmap().asPNG()</code> at a fixed, recorded
+                          scale; store in Blob beside the page row.
+                        </li>
+                        <li>
+                          Persist page text, line geometry, and the raster reference; record page
+                          quality signals (text density, replacement characters, image ratio).
+                        </li>
+                        <li>
+                          Failed pages mark themselves failed without erasing successful ones.
+                        </li>
+                      </ul>
+                    </div>
+                    <div class="work-block">
+                      <h4>Table reconstruction</h4>
+                      <ul>
+                        <li>
+                          Split each page into column bands by horizontal gap
+                          <em>before</em> clustering rows &mdash; two-column pages otherwise merge
+                          across the gutter.
+                        </li>
+                        <li>
+                          Within a band, cluster lines into rows by <em>y</em> within tolerance,
+                          then order cells by <em>x</em>.
+                        </li>
+                        <li>
+                          Read ruling lines through the <code>onVector</code> walker where a table
+                          is bordered; fall back to whitespace alignment where it is not.
+                        </li>
+                        <li>
+                          Attach the governing table title, unit line, column headers, and footnotes
+                          to every cell before it can become an assertion.
+                        </li>
+                        <li>
+                          Where a band resolves poorly, keep the page raster available for a vision
+                          read rather than emitting a malformed grid.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="acceptance">
+                    <strong>Exit check</strong>The RBI appendix tables and the Delhivery
+                    consolidated financial notes both reconstruct into rows whose cells retain
+                    title, unit, and column header. Highlight boxes drawn from stored geometry land
+                    correctly on the stored raster &mdash; verified by eye on one page before any
+                    later phase depends on it.
+                  </div>
+                  <div class="risk">
+                    <strong>Observed during evaluation:</strong> on Delhivery&rsquo;s notes pages
+                    the rupee glyph decodes as <code>I</code>, because the symbol is absent from the
+                    font&rsquo;s encoding map. Currency must be inferred from the governing header
+                    line &mdash; <em>&ldquo;All amounts in Indian Rupees in million&rdquo;</em> sits
+                    on the same page &mdash; not from the character in the cell.
+                  </div>
+                </div>
+              </article>
+
+              <article class="phase" id="phase-4">
+                <div class="phase-marker">
+                  <span class="number">04</span><span class="depends">Depends on 03</span>
+                </div>
+                <div class="phase-body">
+                  <h3>Atomic assertion extraction</h3>
+                  <p class="phase-goal">
+                    Split prose and tables into independently testable propositions that carry the
+                    context needed to compare them.
+                  </p>
+                  <div class="work-grid">
+                    <div class="work-block">
+                      <h4>Extraction pass</h4>
+                      <ul>
+                        <li>
+                          Batch lines by semantic section, preserving line IDs and page boundaries.
+                        </li>
+                        <li>
+                          Use Luna with Structured Outputs to split compound prose into atomic
+                          assertions &mdash; this is the only stage that touches every page, so it
+                          carries the volume.
+                        </li>
+                        <li>
+                          Extract subject, predicate, raw value, unit, qualifiers, modality,
+                          attribution, and the line IDs the claim rests on.
+                        </li>
+                        <li>
+                          Build table assertions from title + row header + column header + cell +
+                          unit + footnote, never from an isolated number.
+                        </li>
+                      </ul>
+                    </div>
+                    <div class="work-block">
+                      <h4>Qualifiers that follow the document</h4>
+                      <ul>
+                        <li>
+                          Let the model name its own qualifier keys and store them in JSONB &mdash;
+                          macro reports yield <code>fiscal_year</code> and <code>geography</code>,
+                          Delhivery yields <code>segment</code> and <code>quarter</code>.
+                        </li>
+                        <li>
+                          Rank salience by numeric content and by repetition across documents;
+                          nothing more elaborate.
+                        </li>
+                        <li>
+                          Treat document text as untrusted quoted data: it cannot rewrite
+                          instructions or change rules.
+                        </li>
+                        <li>
+                          Retain low-confidence candidates internally rather than discarding them;
+                          the grounding gate decides what publishes.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="acceptance">
+                    <strong>Exit check</strong>Every candidate is atomic and points at line IDs that
+                    exist. The qualifier keys produced for the macro set visibly differ from those
+                    produced for the Delhivery set, with no schema change between runs.
+                  </div>
+                </div>
+              </article>
+
+              <article class="phase" id="phase-5">
+                <div class="phase-marker">
+                  <span class="number">05</span><span class="depends">Depends on 04</span>
+                </div>
+                <div class="phase-body">
+                  <h3>Grounding gate and normalization</h3>
+                  <p class="phase-goal">
+                    Stop structurally valid but unsupported model output from reaching the published
+                    tier, and make equivalent wording comparable without erasing what each document
+                    said.
+                  </p>
+                  <div class="work-grid">
+                    <div class="work-block">
+                      <h4>Two hard gates</h4>
+                      <ul>
+                        <li>
+                          <strong>Verbatim:</strong> the quoted span must occur in the stored page
+                          text, and the cited lines must exist. Deterministic, no model involved,
+                          and the main defense against confident invention.
+                        </li>
+                        <li>
+                          <strong>Context completeness:</strong> reject an assertion whose predicate
+                          demands a qualifier it lacks &mdash; a revenue figure with no period, a
+                          growth rate with no geography, a segment metric with no segment.
+                        </li>
+                        <li>
+                          Check numbers, signs, percentages, currencies, dates, and units against
+                          the source span.
+                        </li>
+                        <li>
+                          Rejections are stored with a reason and surfaced in the failures view;
+                          nothing is silently dropped.
+                        </li>
+                      </ul>
+                    </div>
+                    <div class="work-block">
+                      <h4>Deterministic normalization</h4>
+                      <ul>
+                        <li>
+                          Normalize currencies, scales, percentages, units, signs, dates, fiscal
+                          periods, and ranges in code, never by model.
+                        </li>
+                        <li>
+                          Keep the raw value beside the canonical value and record which rule
+                          converted it.
+                        </li>
+                        <li>
+                          Represent time as an interval plus precision so FY, quarter, and calendar
+                          year stay comparable.
+                        </li>
+                        <li>
+                          A handful of unit tests over these converters &mdash; the one place where
+                          testing is cheaper than inspection.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="acceptance">
+                    <strong>Exit check</strong><code>&#8377;81,415.38 million</code> and its
+                    canonical INR value remain traceably equivalent, with fiscal period and modality
+                    intact. No published assertion exists whose quote cannot be found in its page
+                    text.
+                  </div>
+                </div>
+              </article>
+
+              <article class="phase" id="phase-6">
+                <div class="phase-marker">
+                  <span class="number">06</span><span class="depends">Depends on 05</span>
+                </div>
+                <div class="phase-body">
+                  <h3>Candidate pairing</h3>
+                  <p class="phase-goal">
+                    Find every pair worth judging without an O(n&sup2;) sweep, and without asking
+                    similarity to decide truth.
+                  </p>
+                  <div class="work-grid">
+                    <div class="work-block">
+                      <h4>Two retrieval paths</h4>
+                      <ul>
+                        <li>
+                          <strong>Deterministic:</strong> match on normalized predicate and
+                          comparable canonical value. Embeddings are unreliable on numbers &mdash;
+                          <code>&#8377;7,225 crore</code> against
+                          <code>&#8377;72.25 billion</code> is a coin flip in vector space and exact
+                          in this path.
+                        </li>
+                        <li>
+                          <strong>Semantic:</strong> pgvector top-<em>k</em> over embedded subject
+                          and predicate text, catching the same fact worded differently.
+                        </li>
+                        <li>
+                          Union and deduplicate the two. Full-text search is deliberately omitted;
+                          it overlaps both and earns its place only if pairs are visibly being
+                          missed.
+                        </li>
+                        <li>
+                          Exact vector search at this scale; no HNSW index until something is
+                          actually slow.
+                        </li>
+                      </ul>
+                    </div>
+                    <div class="work-block">
+                      <h4>Prefilter before any model call</h4>
+                      <ul>
+                        <li>
+                          A thousand-odd assertions at top-20 produces tens of thousands of pairs
+                          &mdash; far too many to adjudicate. The deterministic prefilter is what
+                          makes this phase tractable.
+                        </li>
+                        <li>
+                          Drop pairs with incompatible value types or unrelated predicates before a
+                          model sees them.
+                        </li>
+                        <li>
+                          Do <em>not</em> drop a pair merely because time, units, or scope differ
+                          &mdash; those differences are exactly what reconciliation explains.
+                        </li>
+                        <li>Cap pairs per assertion and record what the cap excluded.</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="acceptance">
+                    <strong>Exit check</strong>Known comparable pairs across the three Delhivery
+                    documents and the three macro documents reach the adjudicator. Semantically
+                    opposite but lexically similar claims arrive for judgement rather than being
+                    pre-labelled by similarity.
+                  </div>
+                </div>
+              </article>
+
+              <article class="phase" id="phase-7">
+                <div class="phase-marker">
+                  <span class="number">07</span><span class="depends">Depends on 06</span>
+                </div>
+                <div class="phase-body">
+                  <h3>Relationship adjudication</h3>
+                  <p class="phase-goal">
+                    Explain agreement and conflict at the level of entity, time, scope, unit,
+                    modality, and attribution &mdash; not as one opaque label.
+                  </p>
+                  <div class="work-grid">
+                    <div class="work-block">
+                      <h4>Decision sequence</h4>
+                      <ul>
+                        <li>
+                          Apply deterministic equality, unit conversion, time-overlap, sign, and
+                          numeric tolerance checks first.
+                        </li>
+                        <li>
+                          Send survivors to Terra with both evidence quotes and both qualifier sets
+                          bound to the prompt.
+                        </li>
+                        <li>
+                          Never emit <code>contradicts</code> without evidence from both sides and a
+                          demonstration that the decisive context matches.
+                        </li>
+                        <li>
+                          Where required context is missing on either side, return
+                          <code>insufficient</code> rather than guessing.
+                        </li>
+                      </ul>
+                    </div>
+                    <div class="work-block">
+                      <h4>The contradiction second pass</h4>
+                      <ul>
+                        <li>
+                          Every pair Terra marks <code>contradicts</code> goes back through Terra
+                          high once more, with the burden reversed: argue why these are
+                          reconcilable.
+                        </li>
+                        <li>
+                          Volume makes this affordable &mdash; contradictions are tens of pairs, not
+                          thousands &mdash; and contradiction precision is what the demo rests on.
+                        </li>
+                        <li>
+                          Downgrade to <code>reconciles</code> when the second pass finds a decisive
+                          qualifier; keep both passes&rsquo; reasoning in the edge record.
+                        </li>
+                        <li>Emit a concise comparison explanation, never raw chain-of-thought.</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="acceptance">
+                    <strong>Exit check</strong>The system separates a genuine contradiction from a
+                    difference of time, data vintage, unit, scope, or projection-versus-actual, and
+                    shows which qualifier decided it.
+                  </div>
+                  <div class="risk">
+                    <strong>Primary risk:</strong> attribution silently changes the proposition.
+                    &ldquo;GDP will grow 6.5%&rdquo; and &ldquo;the RBI projects 6.5%&rdquo; are not
+                    the same claim. Keep <code>modality</code> and
+                    <code>attributedTo</code> explicit in the prompt before any incompatibility is
+                    declared.
+                  </div>
+                </div>
+              </article>
+
+              <article class="phase" id="phase-8">
+                <div class="phase-marker">
+                  <span class="number">08</span><span class="depends">Depends on 03&ndash;07</span>
+                </div>
+                <div class="phase-body">
+                  <h3>Speed, reuse, and incremental documents</h3>
+                  <p class="phase-goal">
+                    Make the system feel fast by ordering work well and never repeating it, rather
+                    than by doing less of it.
+                  </p>
+                  <div class="work-grid">
+                    <div class="work-block">
+                      <h4>Perceived latency</h4>
+                      <ul>
+                        <li>
+                          Map the whole document cheaply first, then process summaries, highlights,
+                          and table-dense pages ahead of body prose.
+                        </li>
+                        <li>
+                          Stream verified facts to the UI as they land instead of waiting for the
+                          run to finish &mdash; this, not raw throughput, is what reads as fast.
+                        </li>
+                        <li>
+                          Fan out page batches with bounded concurrency to respect provider and
+                          database limits.
+                        </li>
+                        <li>
+                          Record stage timings, retries, and failure codes in logs for debugging.
+                        </li>
+                      </ul>
+                    </div>
+                    <div class="work-block">
+                      <h4>Reuse</h4>
+                      <ul>
+                        <li>
+                          Skip parse and extraction entirely when a content hash has already been
+                          processed at the current pipeline version.
+                        </li>
+                        <li>
+                          When a new PDF arrives, extract only its assertions and pair them against
+                          existing ones; never rebuild prior documents.
+                        </li>
+                        <li>Recompute broadly only when the pipeline version changes.</li>
+                        <li>Cache page rasters and embeddings alongside their source rows.</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="acceptance">
+                    <strong>Exit check</strong>Facts appear progressively while later pages are
+                    still processing. Re-uploading a processed PDF returns almost immediately.
+                    Adding a fourth document to a set does not reprocess the first three.
+                  </div>
+                </div>
+              </article>
+
+              <article class="phase" id="phase-9">
+                <div class="phase-marker">
+                  <span class="number">09</span><span class="depends">Depends on 02, 05, 07</span>
+                </div>
+                <div class="phase-body">
+                  <h3>Inspection workspace</h3>
+                  <p class="phase-goal">
+                    Make correctness reviewable in seconds without turning the assignment into a UI
+                    project.
+                  </p>
+                  <div class="work-grid">
+                    <div class="work-block">
+                      <h4>Essential interface</h4>
+                      <ul>
+                        <li>Upload area and a job progress rail showing per-page coverage.</li>
+                        <li>
+                          Ranked published facts with subject, predicate, raw and canonical value,
+                          qualifiers, modality, and attribution.
+                        </li>
+                        <li>
+                          Filters for corroborated, contradictory, reconciled, insufficient, and
+                          failed.
+                        </li>
+                        <li>Side-by-side relationship inspector and a JSON export button.</li>
+                      </ul>
+                    </div>
+                    <div class="work-block">
+                      <h4>Evidence and failures</h4>
+                      <ul>
+                        <li>
+                          Render the stored page image and draw the assertion&rsquo;s bounding box
+                          over it at the recorded scale.
+                        </li>
+                        <li>
+                          For table facts, show the governing title, headers, cell, and footnote
+                          alongside the highlight.
+                        </li>
+                        <li>
+                          A dedicated failures view: refused documents, failed pages, and rejected
+                          assertions with their reason codes.
+                        </li>
+                        <li>
+                          Show denied contradictions with the qualifier that defused them &mdash;
+                          the most persuasive screen in the product.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="acceptance">
+                    <strong>Exit check</strong>A reviewer selects any fact or relationship and
+                    reaches both exact evidence regions and the decisive context without reading
+                    logs. The failures view is populated with real failures, not empty.
+                  </div>
+                </div>
+              </article>
+
+              <article class="phase" id="phase-10">
+                <div class="phase-marker">
+                  <span class="number">10</span><span class="depends">Depends on 07&ndash;09</span>
+                </div>
+                <div class="phase-body">
+                  <h3>Four cases, deployment, and handoff</h3>
+                  <p class="phase-goal">
+                    Package the system so the company can understand the idea, run it, and verify
+                    the four required cases.
+                  </p>
+                  <div class="work-grid">
+                    <div class="work-block">
+                      <h4>Demo cases</h4>
+                      <ul>
+                        <li>
+                          Identify candidate examples in the starter PDFs by hand early &mdash;
+                          revenue across the three Delhivery documents, GDP and inflation across
+                          Survey, RBI, and IMF, a director active in one filing and resigned in a
+                          later one &mdash; then build generically toward surfacing them.
+                        </li>
+                        <li>
+                          Select every shown example from system output; hard-code no value,
+                          filename, predicate, or label.
+                        </li>
+                        <li>
+                          Show one corroboration expressed differently in each source, one
+                          defensible contradiction with both evidence spans, and one denied
+                          contradiction reconciled by time, scope, unit, or vintage.
+                        </li>
+                        <li>
+                          Show one real failure, the abstention behavior around it, and the repair
+                          path.
+                        </li>
+                      </ul>
+                    </div>
+                    <div class="work-block">
+                      <h4>Submission</h4>
+                      <ul>
+                        <li>
+                          Deploy Next.js on Vercel with jobs through Inngest, data on Neon, files on
+                          Blob.
+                        </li>
+                        <li>
+                          Commit a <code>samples/</code> folder of exported JSON and page images so
+                          reviewers can evaluate without paid credentials.
+                        </li>
+                        <li>
+                          Record a demo under three minutes: upload, progressive processing, facts
+                          and evidence, the four cases, one architecture trade-off.
+                        </li>
+                        <li>
+                          README covering setup, approach, AI tools used, limitations &mdash;
+                          including the absence of measured accuracy &mdash; and next steps, over
+                          meaningful git history.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="acceptance">
+                    <strong>Exit check</strong>A clean reviewer path succeeds from README to hosted
+                    demo or local run, and all four cases are inspectable directly from
+                    system-produced evidence.
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="section" id="risks">
+            <div class="section-kicker"><span class="eyebrow">D · Risk register</span></div>
+            <h2>Failures to surface early.</h2>
+            <p class="section-intro">
+              Ordered by ability to invalidate the product promise, not by implementation
+              difficulty. The first two were observed while evaluating the parser against the actual
+              starter documents, not predicted.
+            </p>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Risk</th>
+                    <th>Early signal</th>
+                    <th>Mitigation</th>
+                    <th>Owner phase</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Two-column pages merge rows across the gutter</td>
+                    <td>Row text reads as duplicated or interleaved</td>
+                    <td>Split into column bands by horizontal gap before clustering rows</td>
+                    <td>03</td>
+                  </tr>
+                  <tr>
+                    <td>Currency symbols lost to font encoding</td>
+                    <td>Rupee sign appears as <code>I</code> in extracted cells</td>
+                    <td>Infer unit from the governing header line, not the cell glyph</td>
+                    <td>03&ndash;05</td>
+                  </tr>
+                  <tr>
+                    <td>Table value loses governing context</td>
+                    <td>Correct number, wrong year, unit, or row</td>
+                    <td>Cells carry title, headers, and footnotes before becoming assertions</td>
+                    <td>03&ndash;05</td>
+                  </tr>
+                  <tr>
+                    <td>Model invents a supported-looking fact</td>
+                    <td>Valid JSON whose quote is not in the page</td>
+                    <td>Deterministic verbatim gate ahead of publication</td>
+                    <td>05</td>
+                  </tr>
+                  <tr>
+                    <td>Pairing misses the relevant match</td>
+                    <td>Adjudication looks accurate while known pairs never appear</td>
+                    <td>Deterministic value path alongside the semantic path</td>
+                    <td>06</td>
+                  </tr>
+                  <tr>
+                    <td>Context mismatch labelled a contradiction</td>
+                    <td>Conflict evaporates once time or scope is compared</td>
+                    <td>Hard context gates, then the reversed-burden second pass</td>
+                    <td>07</td>
+                  </tr>
+                  <tr>
+                    <td>Attribution collapses distinct claims</td>
+                    <td>A forecast and a report of that forecast read as one</td>
+                    <td>
+                      Explicit <code>modality</code> and <code>attributedTo</code> in the prompt
+                    </td>
+                    <td>07</td>
+                  </tr>
+                  <tr>
+                    <td>Quality drifts unnoticed without metrics</td>
+                    <td>A prompt change quietly worsens output</td>
+                    <td>
+                      Re-read the same fixed set of pages after each prompt change; state the
+                      absence of measurement plainly in the README
+                    </td>
+                    <td>All</td>
+                  </tr>
+                  <tr>
+                    <td>Demo overfits the supplied documents</td>
+                    <td>An unseen PDF fails despite a polished sample</td>
+                    <td>
+                      Generic contracts, no filename or predicate branches, test with an outside PDF
+                      before recording
+                    </td>
+                    <td>10</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout">
+              <h3>Retired from revision 1</h3>
+              <p>
+                &ldquo;Evidence points to the wrong visual region&rdquo; was the highest-ranked
+                risk. It is gone rather than mitigated: the parser and the viewer now share one
+                coordinate space, so there is no transform left to get wrong.
+              </p>
+            </div>
+
+            <div class="callout danger">
+              <h3>Stop conditions</h3>
+              <p>
+                Do not add chat, graph visualization, a second parser, an accuracy harness, or
+                decorative UI while any of the following is still true: published facts carry quotes
+                that cannot be found in their page, contradictions survive that a qualifier would
+                defuse, known pairs never reach the adjudicator, or the failures view is empty
+                because failures are being swallowed.
+              </p>
+            </div>
+
+            <div aria-label="Deferred decisions">
+              <details>
+                <summary>What changed from revision 1</summary>
+                <div>
+                  <p>
+                    Removed: the Modal parsing service, Python, PyMuPDF, Docling, OCR, dual-parse
+                    comparison, chart vision extraction, UploadThing, derived facts, claim clusters,
+                    the entity and alias tables, the versioned predicate registry, browser PDF.js,
+                    open-ended risk-based model escalation, and every accuracy target, benchmark
+                    dataset, gold set, and evaluation phase. Thirteen tables became five, seven
+                    verdicts became four, five modality values became two plus an attribution field,
+                    and thirteen phases became eleven.
+                  </p>
+                  <p>
+                    Added: MuPDF.js as a single in-process parser, coordinate-clustered table
+                    reconstruction with column-band splitting, page rasters as the evidence surface,
+                    a context-completeness gate at extraction, document-driven JSONB qualifier keys,
+                    the reversed-burden contradiction second pass, and a failures view in the UI.
+                  </p>
+                </div>
+              </details>
+              <details>
+                <summary>Accepted decisions</summary>
+                <div>
+                  <p>
+                    Job-based processing; Vercel Blob; Vercel + Inngest; Neon with pgvector; AI SDK
+                    model layer in TypeScript; immutable assertions; deterministic normalization;
+                    MuPDF.js parsing and rasterization; precision over recall over latency; minimal
+                    UI; supplied-PDF demo; no measured accuracy claims.
+                  </p>
+                </div>
+              </details>
+              <details>
+                <summary>Intentionally deferred</summary>
+                <div>
+                  <p>
+                    Authentication, tenancy, retention, abuse controls, multilingual support,
+                    scanned documents, chart data extraction, separate vector infrastructure, graph
+                    database, chat, and graph visualization. None is a prerequisite for a
+                    reviewer-only submission.
+                  </p>
+                </div>
+              </details>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <footer class="footer">
+        <span>Superfact implementation plan &middot; revision 2</span>
+        <span>Scoped against the supplied assignment and starter datasets</span>
+      </footer>
+    </div>
+
+    <script>
+      (() => {
+        const root = document.documentElement;
+        const button = document.getElementById("theme-toggle");
+        const themes = ["light", "dark"];
+        const saved = localStorage.getItem("superjoin-plan-theme");
+        const initial = themes.includes(saved)
+          ? saved
+          : matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light";
+
+        function applyTheme(theme) {
+          root.dataset.theme = theme;
+          button.textContent = `Theme: ${theme === "dark" ? "Dark" : "Light"}`;
+          button.setAttribute("aria-label", `Change color theme; current theme is ${theme}`);
+        }
+
+        applyTheme(initial);
+        button.addEventListener("click", () => {
+          const next = root.dataset.theme === "dark" ? "light" : "dark";
+          localStorage.setItem("superjoin-plan-theme", next);
+          applyTheme(next);
+        });
+      })();
+    </script>
+  </body>
+</html>
