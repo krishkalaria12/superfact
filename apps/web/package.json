@@ -4,16 +4,20 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3001",
+    "dev:inngest": "inngest-cli dev --no-discovery -u http://localhost:3001/api/inngest",
     "build": "next build",
     "check-types": "tsc --noEmit",
     "start": "next start"
   },
   "dependencies": {
+    "@superfact/db": "workspace:*",
     "@superfact/env": "workspace:*",
     "@superfact/ui": "workspace:*",
     "@swc/helpers": "^0.5.23",
     "babel-plugin-react-compiler": "^1.0.0",
     "dotenv": "catalog:",
+    "evlog": "^2.28.1",
+    "inngest": "^4.20.0",
     "lucide-react": "catalog:",
     "next": "^16.3.0",
     "next-themes": "catalog:",
@@ -28,6 +32,7 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "inngest-cli": "^1.44.0",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"
   }

@@ -34,16 +34,40 @@ cut, and the plan's changelog says why.
 Parsing is `mupdf` (WASM) in-process. The evidence viewer draws boxes on stored page rasters using
 the coordinates the parser emitted, so parser and viewer share one coordinate space.
 
+## Logging
+
+evlog, configured in `apps/web/src/lib/evlog.ts`. Wide events, not log lines: a handler wrapped in
+`withEvlog` accumulates context through `useLogger().set()` and emits one event when the request
+finishes. Never use `console.log`.
+
+Every event about a run carries `job.id` and `job.stages`. `stages` is a list because Inngest
+checkpoints several steps into one HTTP request, and one wide event covers that whole request — a
+scalar would keep only the last stage of the batch. Add a field to `SuperfactFields` before setting
+it; the type is enforced.
+
+`log.fork()` is not usable for stage work. It is fire-and-forget and swallows the error, so a
+failing stage would report success.
+
 ## Layout
 
 `apps/web` (app, API, jobs) · `packages/db` (Drizzle schema) · `packages/env` (validated env) ·
 `packages/ui` (shared shadcn primitives, imported as `@superfact/ui/*`) · `packages/config`.
 
-Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`.
+Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. Only `jobs` exists so far.
+
+Import Drizzle operators from `@superfact/db/orm`, never from `drizzle-orm` directly. A second copy
+of the package in the tree yields two incompatible sets of column types.
+
+An environment variable is required only from the phase that first reads it, so a fresh clone runs
+on `DATABASE_URL` alone. `apps/web/.env.example` records which phase claims each one.
 
 ## Commands
 
-`pnpm dev` · `pnpm check-types` · `pnpm check` (Oxlint + Oxfmt) · `pnpm db:push`.
+`pnpm dev` (Next.js on 3001 and the Inngest dev server on 8288) · `pnpm check-types` ·
+`pnpm check` (Oxlint + Oxfmt) · `pnpm db:push`.
+
+`POST /api/dev/sample-job` runs a job with no document through the placeholder stages; `GET` on the
+same path lists recent job rows. Both refuse in production. Phase 02 replaces them with uploads.
 
 Run `pnpm check` and `pnpm check-types` before calling work done.
 

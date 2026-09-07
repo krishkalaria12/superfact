@@ -3,6 +3,8 @@ packages:
   - packages/*
 allowBuilds:
   esbuild: true
+  inngest-cli: true
+  protobufjs: false
   sharp: true
   simple-git-hooks: true
 catalog:
