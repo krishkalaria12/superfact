@@ -1,0 +1,3 @@
+{
+  "extends": "@superfact/config/tsconfig.base.json"
+}

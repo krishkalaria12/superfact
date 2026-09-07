@@ -1,0 +1,34 @@
+{
+  "name": "superfact",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "check-types": "turbo run check-types",
+    "dev:web": "turbo run dev -F web --",
+    "db:push": "turbo run db:push -F @superfact/db --",
+    "db:studio": "turbo run db:studio -F @superfact/db --",
+    "db:generate": "turbo run db:generate -F @superfact/db --",
+    "db:migrate": "turbo run db:migrate -F @superfact/db --",
+    "check": "oxlint && oxfmt --write"
+  },
+  "dependencies": {
+    "@superfact/env": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@superfact/config": "workspace:*",
+    "@types/node": "catalog:",
+    "oxfmt": "^0.65.0",
+    "oxlint": "^1.80.0",
+    "turbo": "^2.10.12",
+    "typescript": "catalog:"
+  },
+  "packageManager": "pnpm@11.25.0"
+}
