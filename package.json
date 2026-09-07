@@ -15,7 +15,8 @@
     "db:studio": "turbo run db:studio -F @superfact/db --",
     "db:generate": "turbo run db:generate -F @superfact/db --",
     "db:migrate": "turbo run db:migrate -F @superfact/db --",
-    "check": "oxlint && oxfmt --write"
+    "check": "oxlint && oxfmt --write",
+    "prepare": "simple-git-hooks"
   },
   "dependencies": {
     "@superfact/env": "workspace:*",
@@ -27,8 +28,12 @@
     "@types/node": "catalog:",
     "oxfmt": "^0.65.0",
     "oxlint": "^1.80.0",
+    "simple-git-hooks": "^2.14.0",
     "turbo": "^2.10.12",
     "typescript": "catalog:"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "staged=$(git diff --cached --name-only --diff-filter=ACMR) && pnpm exec oxlint && pnpm exec oxfmt --write && [ -z \"$staged\" ] || git add -- $staged"
   },
   "packageManager": "pnpm@11.25.0"
 }
