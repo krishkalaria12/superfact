@@ -17,6 +17,15 @@ export type SuperfactFields = {
     pipelineVersion: string;
     stages: JobStage[];
   };
+  /**
+   * The result of a phase exit check. `differences` names the paths that failed, so a broken
+   * check is diagnosable from the log alone without re-running it.
+   */
+  check: {
+    name: string;
+    ok: boolean;
+    differences: string[];
+  };
 };
 
 const evlog = createEvlog({

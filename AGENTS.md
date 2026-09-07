@@ -54,8 +54,8 @@ failing stage would report success.
 `apps/web` (app, API, jobs) · `packages/db` (Drizzle schema) · `packages/env` (validated env) ·
 `packages/ui` (shared shadcn primitives, imported as `@superfact/ui/*`) · `packages/config`.
 
-Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. All five exist; only `jobs` has
-ever held a row.
+Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. All five exist; only `jobs` and
+the fixtures the round-trip check writes have ever held a row.
 
 Zod contracts live beside the schema in `packages/db/src/contracts`, imported as
 `@superfact/db/contracts`. Enum values are declared once as `pgEnum`s in the schema and the
@@ -88,7 +88,11 @@ plan was written; the plan's revision-2 changelog used to list UploadThing as cu
 `assertions.embedding` is `vector(1536)`.
 
 `POST /api/dev/sample-job` runs a job with no document through the placeholder stages; `GET` on the
-same path lists recent job rows. Both refuse in production. Phase 02 replaces them with uploads.
+same path lists recent job rows. `POST /api/dev/round-trip` is the phase 01 exit check: it writes a
+hand-written page, two published assertions, a rejection, and an edge, projects them into the JSON
+export, and diffs the result against what went in — non-empty `differences` means a field is being
+lost. It cleans up after itself. All three refuse in production. Phase 02 replaces sample-job with
+uploads.
 
 Run `pnpm check` and `pnpm check-types` before calling work done.
 
