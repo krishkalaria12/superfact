@@ -76,6 +76,8 @@ export const POST = withEvlog(async () => {
         height: fixturePage.height,
         text: fixturePage.text,
         lines: fixturePage.lines,
+        bands: fixturePage.bands,
+        tables: fixturePage.tables,
         quality: fixturePage.quality,
         status: "parsed",
       })

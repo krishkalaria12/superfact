@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { parsedLineSchema } from "./geometry";
+import { columnBandSchema, reconstructedTableSchema } from "./tables";
 
 /**
  * Signals that say whether a page was worth reading, recorded per page rather than per document
@@ -35,6 +36,8 @@ export const parsedPageSchema = z.object({
   height: z.number().positive(),
   text: z.string(),
   lines: z.array(parsedLineSchema),
+  bands: z.array(columnBandSchema),
+  tables: z.array(reconstructedTableSchema),
   raster: pageRasterSchema.nullable(),
   quality: pageQualitySchema,
 });

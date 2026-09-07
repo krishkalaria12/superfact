@@ -24,6 +24,12 @@ export type SuperfactFields = {
     byteSize: number;
     outcome: string;
   };
+  /** Page coverage from the parse stage, so a partial document is legible from the log alone. */
+  parse: {
+    pageCount: number;
+    parsed: number;
+    failed: number;
+  };
   /**
    * The result of a phase exit check. `differences` names the paths that failed, so a broken
    * check is diagnosable from the log alone without re-running it.

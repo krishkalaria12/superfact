@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import type { PageQuality } from "../contracts/pages";
+import type { ColumnBand, ReconstructedTable } from "../contracts/tables";
 import type { ParsedLine } from "../contracts/geometry";
 import { documents } from "./documents";
 
@@ -43,6 +44,10 @@ export const pages = pgTable(
     height: doublePrecision("height"),
     text: text("text").notNull().default(""),
     lines: jsonb("lines").$type<ParsedLine[]>().notNull().default([]),
+    // Reconstructed here rather than at extraction, because the geometry that resolves a grid is
+    // gone by the time a page is only text. A ragged table keeps its box and drops its rows.
+    bands: jsonb("bands").$type<ColumnBand[]>().notNull().default([]),
+    tables: jsonb("tables").$type<ReconstructedTable[]>().notNull().default([]),
     // Recorded, not assumed: the viewer scales stored boxes by exactly this number.
     rasterKey: text("raster_key"),
     rasterUrl: text("raster_url"),

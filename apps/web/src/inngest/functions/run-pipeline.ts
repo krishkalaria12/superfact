@@ -3,17 +3,18 @@ import type { JobStage } from "@superfact/db";
 import { and, eq, inArray } from "@superfact/db/orm";
 
 import { useLogger } from "@/lib/evlog";
+import { parseDocument } from "@/lib/parse";
 import { inngest, jobRunRequested } from "../client";
 
 /**
  * The durable spine: parse, then extract, then relate.
  *
- * The stages themselves are still placeholders — phase 03 fills in parse, phase 04 extract,
- * phases 06-07 relate. What is real is that each one is safe to run twice. Inngest retries a step
- * on failure and replays completed steps on a later attempt, so a stage that appended to its
- * output would double it. Each stage therefore clears its own output for this document at this
- * pipeline version before producing any, which makes the run idempotent by construction rather
- * than by every future stage remembering to check.
+ * Parse is real from phase 03; extract and relate stay placeholders until phases 04 and 06-07.
+ * What holds across all three is that each is safe to run twice. Inngest retries a step on failure
+ * and replays completed steps on a later attempt, so a stage that appended to its output would
+ * double it. Each stage therefore clears its own output for this document at this pipeline version
+ * before producing any, which makes the run idempotent by construction rather than by every future
+ * stage remembering to check.
  */
 
 /**
@@ -111,8 +112,27 @@ export const runPipeline = inngest.createFunction(
         await db.update(jobs).set({ stage }).where(eq(jobs.id, job.id));
         await clearStageOutput(stage, job.documentId, job.pipelineVersion);
 
-        // Phase 03 fills in parse, phase 04 extract, phases 06-07 relate.
-        log.info(`stage ${stage} finished with no work to do`);
+        if (stage !== "parse") {
+          // Phase 04 fills in extract, phases 06-07 relate.
+          log.info(`stage ${stage} finished with no work to do`);
+          return;
+        }
+
+        const [document] = await db
+          .select()
+          .from(documents)
+          .where(eq(documents.id, job.documentId));
+
+        if (!document) throw new Error(`no document ${job.documentId}`);
+
+        const summary = await parseDocument(document);
+        log.set({ parse: summary });
+        log.info(`parsed ${summary.parsed} of ${summary.pageCount} pages`);
+
+        // Every page failing is a failed document, not a document that parsed into nothing.
+        if (summary.parsed === 0 && summary.pageCount > 0) {
+          throw new Error(`every page of document ${document.id} failed to parse`);
+        }
       });
     }
 

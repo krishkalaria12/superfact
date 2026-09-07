@@ -22,12 +22,24 @@ export type Bbox = z.infer<typeof bboxSchema>;
  * One line of text as the parser read it.
  *
  * `id` is what an extracted assertion cites, so it has to survive into storage unchanged and stay
- * unique within its page. The parser mints it; nothing downstream reconstructs it from position.
+ * unique within its page. The parser mints it as `p{page}l{index}`; nothing downstream
+ * reconstructs it from position.
+ *
+ * A "line" here is MuPDF's line, which on a table page is one cell rather than one visual row.
+ * That is the useful granularity: cells are what carry values, and rows are rebuilt from them.
  */
 export const parsedLineSchema = z.object({
   id: z.string().min(1),
   text: z.string(),
   bbox: bboxSchema,
+  /**
+   * The largest glyph size on the line, in points.
+   *
+   * Carried because it is the one signal that separates a table's title from the body text above
+   * it without knowing anything about the document. Reading order and indentation both fail on a
+   * page where the running header sits closer to the table than the heading does.
+   */
+  size: z.number().nonnegative(),
 });
 
 export type ParsedLine = z.infer<typeof parsedLineSchema>;

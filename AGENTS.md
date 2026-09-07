@@ -33,7 +33,10 @@ browser-side PDF.js, accuracy metrics, gold sets, or benchmark evaluation. Each 
 cut, and the plan's changelog says why.
 
 Parsing is `mupdf` (WASM) in-process. The evidence viewer draws boxes on stored page rasters using
-the coordinates the parser emitted, so parser and viewer share one coordinate space.
+the coordinates the parser emitted, so parser and viewer share one coordinate space. Rasters are
+grayscale PNG at `RASTER_SCALE` (2×), and the scale is written to the page row rather than assumed
+— a stored bbox times that number is the box on screen. Changing the constant must not silently
+misplace highlights over pages rendered before the change.
 
 ## Logging
 
@@ -54,8 +57,8 @@ failing stage would report success.
 `apps/web` (app, API, jobs) · `packages/db` (Drizzle schema) · `packages/env` (validated env) ·
 `packages/ui` (shared shadcn primitives, imported as `@superfact/ui/*`) · `packages/config`.
 
-Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. `documents` and `jobs` carry real
-rows from phase 02; `pages`, `assertions`, and `edges` wait on phases 03 and 04.
+Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. Only `assertions` and `edges` are
+still empty; phase 04 fills them.
 
 Zod contracts live beside the schema in `packages/db/src/contracts`, imported as
 `@superfact/db/contracts`. Enum values are declared once as `pgEnum`s in the schema and the
@@ -82,6 +85,26 @@ deletes the `customId` before writing it. Ids are minted in `apps/web/src/lib/st
 constructs one inline. This replaced Vercel Blob after the plan was written; the plan's revision-2
 changelog used to list UploadThing as cut.
 
+`apps/web/src/lib/parse` is the parse stage. A MuPDF "line" on a table page is one cell, not one
+visual row, which is the granularity everything else is built on: a row is whatever cells share a
+baseline, a column is whatever cells overlap horizontally. Three rules earn their keep and should
+not be undone casually:
+
+- **Bands before rows.** A band boundary is the complement of merged line coverage. A two-up
+  landscape spread splits at its gutter; an ordinary table does not, because its own title spans
+  the inter-column gaps and closes them. No special case tells the two apart.
+- **Columns from body rows only.** Overlap is transitive, so a heading spanning three columns
+  merges all three. Data cells never span, so the body is the only trustworthy source.
+- **A ragged table emits no rows.** A malformed grid attaches real numbers to the wrong header,
+  and the evidence gate cannot catch that because the quote is genuine. The band keeps its box and
+  its raster for a vision read instead.
+
+Table context comes from typographic convention, never from content: the title is the largest-type
+line above the table in its band (proximity picks the registration number on the Delhivery balance
+sheet), and the unit line is a fully parenthesised line above it. The unit must come from there —
+on the Delhivery notes the rupee glyph is missing from the font's encoding map and decodes as `I`,
+so the character in the cell says nothing.
+
 Intake is hash, refuse, store, enqueue, in that order — `apps/web/src/lib/documents.ts`. Hashing
 first means a known file costs one index lookup; validating second means a scan or a corrupt file
 never reaches storage. `inspectPdf` opens the document, checks for a password, and samples up to
@@ -100,6 +123,10 @@ to check.
 
 `db:push` creates the pgvector extension first, because drizzle-kit does not manage extensions and
 `assertions.embedding` is `vector(1536)`.
+
+`docs/starter-datasets/` holds the six starter PDFs, 511 pages. They are the tuning surface: the
+plan has no gold set, so parser and prompt changes are judged by re-reading output over the same
+fixed pages.
 
 `POST /api/documents` takes a multipart `file` field and answers with one of four outcomes:
 `accepted`, `reused`, `reprocessing`, or `refused`. A refusal is a 200 carrying a reason code, not

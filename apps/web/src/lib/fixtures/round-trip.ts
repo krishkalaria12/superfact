@@ -33,7 +33,10 @@ export const fixturePage: ParsedPage = {
     id: `p1l${i + 1}`,
     text,
     bbox: { x0: 72, y0: 96 + i * 18, x1: 523, y1: 110 + i * 18 },
+    size: i === 0 ? 13 : 9.5,
   })),
+  bands: [{ index: 0, x0: 0, x1: 595 }],
+  tables: [],
   raster: null,
   quality: { textDensity: 4.1, replacementCharRatio: 0, imageRatio: 0 },
 };
