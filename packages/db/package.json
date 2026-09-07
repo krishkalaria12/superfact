@@ -5,17 +5,21 @@
     ".": {
       "default": "./src/index.ts"
     },
+    "./contracts": {
+      "default": "./src/contracts/index.ts"
+    },
     "./*": {
       "default": "./src/*.ts"
     }
   },
   "scripts": {
-    "db:push": "drizzle-kit push",
+    "db:push": "pnpm db:extensions && drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate:deploy": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:migrate": "drizzle-kit migrate",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "db:extensions": "node src/scripts/enable-extensions.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

@@ -17,7 +17,8 @@ These break the product if violated:
 - **Assertions are immutable and per-occurrence.** One row per document mention, even when two
   documents say the identical thing. Interpretation lives in `edges`, never by mutating a row.
 - **Four verdicts only:** `corroborates | contradicts | reconciles | insufficient`. Nuance goes in
-  `reasonCode`, not in new enum values.
+  `reasonCode`, not in new enum values. `PublishedAssertion` types `verified` and `contextComplete`
+  as `true` rather than `boolean`, so an ungrounded fact cannot be constructed.
 - **Never emit `contradicts`** without evidence from both sides and a demonstration that the
   decisive context (time, scope, unit, attribution) actually matches.
 - **No document-specific logic.** No hard-coded facts, filenames, predicates, or branches.
@@ -53,7 +54,14 @@ failing stage would report success.
 `apps/web` (app, API, jobs) · `packages/db` (Drizzle schema) · `packages/env` (validated env) ·
 `packages/ui` (shared shadcn primitives, imported as `@superfact/ui/*`) · `packages/config`.
 
-Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. Only `jobs` exists so far.
+Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. All five exist; only `jobs` has
+ever held a row.
+
+Zod contracts live beside the schema in `packages/db/src/contracts`, imported as
+`@superfact/db/contracts`. Enum values are declared once as `pgEnum`s in the schema and the
+contracts derive from them, so a verdict or reason code cannot drift between the column and the
+JSON. `@superfact/db/projection` is the only place a row and its contract shape meet — both
+directions, so a lost field is a diff rather than a silent gap in an export.
 
 Import Drizzle operators from `@superfact/db/orm`, never from `drizzle-orm` directly. A second copy
 of the package in the tree yields two incompatible sets of column types.
@@ -75,6 +83,9 @@ plan was written; the plan's revision-2 changelog used to list UploadThing as cu
 
 `pnpm dev` (Next.js on 3001 and the Inngest dev server on 8288) · `pnpm check-types` ·
 `pnpm check` (Oxlint + Oxfmt) · `pnpm db:push`.
+
+`db:push` creates the pgvector extension first, because drizzle-kit does not manage extensions and
+`assertions.embedding` is `vector(1536)`.
 
 `POST /api/dev/sample-job` runs a job with no document through the placeholder stages; `GET` on the
 same path lists recent job rows. Both refuse in production. Phase 02 replaces them with uploads.

@@ -1,5 +1,7 @@
 import { index, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
+import { documents } from "./documents";
+
 /** The three durable stages a document moves through, in order. */
 export const jobStage = pgEnum("job_stage", ["parse", "extract", "relate"]);
 
@@ -8,15 +10,15 @@ export const jobStatus = pgEnum("job_status", ["queued", "running", "completed",
 /**
  * One processing run over one document.
  *
- * `documentId` stays a bare column until phase 01 introduces `documents`; a phase 00 sample job
- * carries none. `pipelineVersion` is the same string stamped on every assertion the run
- * publishes, so a job and its output invalidate together.
+ * `documentId` is nullable because the dev sample job carries no document. `pipelineVersion` is
+ * the same string stamped on every assertion the run publishes, so a job and its output
+ * invalidate together.
  */
 export const jobs = pgTable(
   "jobs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    documentId: uuid("document_id"),
+    documentId: uuid("document_id").references(() => documents.id, { onDelete: "cascade" }),
     stage: jobStage("stage").notNull().default("parse"),
     status: jobStatus("status").notNull().default("queued"),
     pipelineVersion: text("pipeline_version").notNull(),
