@@ -10,15 +10,17 @@ export const jobStatus = pgEnum("job_status", ["queued", "running", "completed",
 /**
  * One processing run over one document.
  *
- * `documentId` is nullable because the dev sample job carries no document. `pipelineVersion` is
- * the same string stamped on every assertion the run publishes, so a job and its output
- * invalidate together.
+ * `pipelineVersion` is the same string stamped on every assertion the run publishes, so a job and
+ * its output invalidate together. Re-running a document at a new version means a new job row, not
+ * a mutated one.
  */
 export const jobs = pgTable(
   "jobs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    documentId: uuid("document_id").references(() => documents.id, { onDelete: "cascade" }),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
     stage: jobStage("stage").notNull().default("parse"),
     status: jobStatus("status").notNull().default("queued"),
     pipelineVersion: text("pipeline_version").notNull(),

@@ -54,8 +54,8 @@ failing stage would report success.
 `apps/web` (app, API, jobs) · `packages/db` (Drizzle schema) · `packages/env` (validated env) ·
 `packages/ui` (shared shadcn primitives, imported as `@superfact/ui/*`) · `packages/config`.
 
-Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. All five exist; only `jobs` and
-the fixtures the round-trip check writes have ever held a row.
+Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. `documents` and `jobs` carry real
+rows from phase 02; `pages`, `assertions`, and `edges` wait on phases 03 and 04.
 
 Zod contracts live beside the schema in `packages/db/src/contracts`, imported as
 `@superfact/db/contracts`. Enum values are declared once as `pgEnum`s in the schema and the
@@ -66,8 +66,9 @@ directions, so a lost field is a diff rather than a silent gap in an export.
 Import Drizzle operators from `@superfact/db/orm`, never from `drizzle-orm` directly. A second copy
 of the package in the tree yields two incompatible sets of column types.
 
-An environment variable is required only from the phase that first reads it, so a fresh clone runs
-on `DATABASE_URL` alone. `apps/web/.env.example` records which phase claims each one.
+An environment variable is required only from the phase that first reads it. `DATABASE_URL` and
+`UPLOADTHING_TOKEN` are both required now — uploads are the only way a document enters the system,
+so the app is inert without storage. `apps/web/.env.example` records which phase claims each one.
 
 Embeddings are `text-embedding-3-small` at 1536 dimensions, over subject and predicate text only.
 They serve retrieval in candidate pairing and nothing else: a verdict never rests on similarity, and
@@ -76,8 +77,21 @@ The dimension is fixed in the schema, so changing the model means a migration an
 
 Files live in UploadThing. It assigns its own `{uuid}_{filename}` key and will not take a path, so
 anything a stage may re-upload needs a `customId` derived from content hash and page index —
-otherwise a retry orphans a duplicate instead of overwriting. This replaced Vercel Blob after the
-plan was written; the plan's revision-2 changelog used to list UploadThing as cut.
+otherwise a retry orphans a duplicate instead of overwriting. There is no upsert, so `putObject`
+deletes the `customId` before writing it. Ids are minted in `apps/web/src/lib/storage.ts`; nothing
+constructs one inline. This replaced Vercel Blob after the plan was written; the plan's revision-2
+changelog used to list UploadThing as cut.
+
+Intake is hash, refuse, store, enqueue, in that order — `apps/web/src/lib/documents.ts`. Hashing
+first means a known file costs one index lookup; validating second means a scan or a corrupt file
+never reaches storage. `inspectPdf` opens the document, checks for a password, and samples up to
+twelve pages spread across it, refusing below a median of 120 characters per page. That is the
+whole of phase 02's parsing — phase 03 opens the document again for geometry.
+
+Every pipeline stage clears its own output for the document at the current pipeline version before
+producing any. Inngest replays completed steps on a later attempt, so a stage that appended would
+double its output; clearing first makes a retry idempotent without every future stage remembering
+to check.
 
 ## Commands
 
@@ -87,12 +101,15 @@ plan was written; the plan's revision-2 changelog used to list UploadThing as cu
 `db:push` creates the pgvector extension first, because drizzle-kit does not manage extensions and
 `assertions.embedding` is `vector(1536)`.
 
-`POST /api/dev/sample-job` runs a job with no document through the placeholder stages; `GET` on the
-same path lists recent job rows. `POST /api/dev/round-trip` is the phase 01 exit check: it writes a
-hand-written page, two published assertions, a rejection, and an edge, projects them into the JSON
-export, and diffs the result against what went in — non-empty `differences` means a field is being
-lost. It cleans up after itself. All three refuse in production. Phase 02 replaces sample-job with
-uploads.
+`POST /api/documents` takes a multipart `file` field and answers with one of four outcomes:
+`accepted`, `reused`, `reprocessing`, or `refused`. A refusal is a 200 carrying a reason code, not
+an error — refusing a scan is the system working. `GET /api/documents/:id` and `GET /api/jobs/:id`
+are read-only and both report per-page coverage.
+
+`POST /api/dev/round-trip` is the phase 01 exit check: it writes a hand-written page, two published
+assertions, a rejection, and an edge, projects them into the JSON export, and diffs the result
+against what went in — non-empty `differences` means a field is being lost. It cleans up after
+itself and refuses in production.
 
 Run `pnpm check` and `pnpm check-types` before calling work done.
 

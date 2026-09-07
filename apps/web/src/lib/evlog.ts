@@ -17,6 +17,13 @@ export type SuperfactFields = {
     pipelineVersion: string;
     stages: JobStage[];
   };
+  /** The document a request or run is about, and what intake decided to do with it. */
+  document: {
+    id: string;
+    contentHash: string;
+    byteSize: number;
+    outcome: string;
+  };
   /**
    * The result of a phase exit check. `differences` names the paths that failed, so a broken
    * check is diagnosable from the log alone without re-running it.

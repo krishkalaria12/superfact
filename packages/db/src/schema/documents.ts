@@ -33,8 +33,10 @@ export const documents = pgTable(
     filename: text("filename").notNull(),
     byteSize: integer("byte_size").notNull(),
     pageCount: integer("page_count"),
-    storageKey: text("storage_key").notNull(),
-    storageUrl: text("storage_url").notNull(),
+    // Null when the document was refused before it was worth storing. Validation runs on the
+    // bytes in memory, so a scan or a corrupt file never reaches UploadThing at all.
+    storageKey: text("storage_key"),
+    storageUrl: text("storage_url"),
     status: documentStatus("status").notNull().default("pending"),
     failureReason: documentFailureReason("failure_reason"),
     failureDetail: text("failure_detail"),
