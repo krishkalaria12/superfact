@@ -61,6 +61,11 @@ of the package in the tree yields two incompatible sets of column types.
 An environment variable is required only from the phase that first reads it, so a fresh clone runs
 on `DATABASE_URL` alone. `apps/web/.env.example` records which phase claims each one.
 
+Files live in UploadThing. It assigns its own `{uuid}_{filename}` key and will not take a path, so
+anything a stage may re-upload needs a `customId` derived from content hash and page index —
+otherwise a retry orphans a duplicate instead of overwriting. This replaced Vercel Blob after the
+plan was written; the plan's revision-2 changelog used to list UploadThing as cut.
+
 ## Commands
 
 `pnpm dev` (Next.js on 3001 and the Inngest dev server on 8288) · `pnpm check-types` ·

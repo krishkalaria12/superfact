@@ -23,7 +23,7 @@ visible in both the database and the logs. Parsing, extraction, and adjudication
 | Jobs    | Inngest. Stages: parse, extract, relate                                              |
 | Logs    | evlog. One wide event per request, drained to `.evlog/logs` as NDJSON                |
 | Data    | Neon PostgreSQL + pgvector, Drizzle ORM                                              |
-| Files   | Vercel Blob                                                                          |
+| Files   | UploadThing                                                                          |
 | UI      | Tailwind, shadcn/ui via `packages/ui`                                                |
 
 Everything runs in one TypeScript process. There is no Python service and no OCR.

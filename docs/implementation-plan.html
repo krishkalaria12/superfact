@@ -925,7 +925,7 @@
                   </tr>
                   <tr>
                     <td>Files</td>
-                    <td>Vercel Blob</td>
+                    <td>UploadThing</td>
                     <td>Original PDF bytes and rendered page images</td>
                     <td>Metadata copied into Neon on completion</td>
                   </tr>
@@ -1133,7 +1133,7 @@
                           <code>packages/db</code>, <code>packages/env</code>.
                         </li>
                         <li>
-                          Define environment contracts for the model provider, Neon, Vercel Blob,
+                          Define environment contracts for the model provider, Neon, UploadThing,
                           and Inngest.
                         </li>
                         <li>One local command runs Next.js and the Inngest dev server together.</li>
@@ -1227,7 +1227,7 @@
                       <h4>Upload boundary</h4>
                       <ul>
                         <li>
-                          Accept PDFs through a route handler into Vercel Blob; persist key, URL,
+                          Accept PDFs through a route handler into UploadThing; persist key, URL,
                           checksum, size, and original filename in Neon.
                         </li>
                         <li>
@@ -1252,6 +1252,11 @@
                         <li>
                           Make every stage safe to retry using job ID, content hash, and pipeline
                           version.
+                        </li>
+                        <li>
+                          UploadThing assigns its own <code>{uuid}_{filename}</code> key, so derive
+                          a <code>customId</code> from content hash and page index. A retried stage
+                          resolves to the same object instead of orphaning a duplicate.
                         </li>
                         <li>
                           Expose job status and per-page coverage through read-only endpoints.
@@ -1287,7 +1292,7 @@
                         </li>
                         <li>
                           Render each page with <code>toPixmap().asPNG()</code> at a fixed, recorded
-                          scale; store in Blob beside the page row.
+                          scale; store in UploadThing beside the page row.
                         </li>
                         <li>
                           Persist page text, line geometry, and the raster reference; record page
@@ -1754,7 +1759,7 @@
                       <ul>
                         <li>
                           Deploy Next.js on Vercel with jobs through Inngest, data on Neon, files on
-                          Blob.
+                          UploadThing.
                         </li>
                         <li>
                           Commit a <code>samples/</code> folder of exported JSON and page images so
@@ -1894,12 +1899,12 @@
                 <div>
                   <p>
                     Removed: the Modal parsing service, Python, PyMuPDF, Docling, OCR, dual-parse
-                    comparison, chart vision extraction, UploadThing, derived facts, claim clusters,
-                    the entity and alias tables, the versioned predicate registry, browser PDF.js,
-                    open-ended risk-based model escalation, and every accuracy target, benchmark
-                    dataset, gold set, and evaluation phase. Thirteen tables became five, seven
-                    verdicts became four, five modality values became two plus an attribution field,
-                    and thirteen phases became eleven.
+                    comparison, chart vision extraction, derived facts, claim clusters, the entity
+                    and alias tables, the versioned predicate registry, browser PDF.js, open-ended
+                    risk-based model escalation, and every accuracy target, benchmark dataset, gold
+                    set, and evaluation phase. Thirteen tables became five, seven verdicts became
+                    four, five modality values became two plus an attribution field, and thirteen
+                    phases became eleven.
                   </p>
                   <p>
                     Added: MuPDF.js as a single in-process parser, coordinate-clustered table
@@ -1913,7 +1918,7 @@
                 <summary>Accepted decisions</summary>
                 <div>
                   <p>
-                    Job-based processing; Vercel Blob; Vercel + Inngest; Neon with pgvector; AI SDK
+                    Job-based processing; UploadThing; Vercel + Inngest; Neon with pgvector; AI SDK
                     model layer in TypeScript; immutable assertions; deterministic normalization;
                     MuPDF.js parsing and rasterization; precision over recall over latency; minimal
                     UI; supplied-PDF demo; no measured accuracy claims.

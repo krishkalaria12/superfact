@@ -19,8 +19,8 @@ export const env = createEnv({
     // Model provider for extraction and adjudication. Required from phase 04.
     OPENAI_API_KEY: z.string().min(1).optional(),
 
-    // Vercel Blob, for original PDF bytes and rendered page rasters. Required from phase 02.
-    BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
+    // UploadThing, for original PDF bytes and rendered page rasters. Required from phase 02.
+    UPLOADTHING_TOKEN: z.string().min(1).optional(),
 
     // Inngest. The local dev server needs neither key; both are required once deployed
     // (phase 10). INNGEST_DEV points the SDK at a dev server on a non-default host.
