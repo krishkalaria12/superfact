@@ -17,7 +17,8 @@
     "db:migrate": "turbo run db:migrate -F @superfact/db --",
     "check": "oxlint && oxfmt --write",
     "prepare": "simple-git-hooks",
-    "samples": "turbo run samples -F web --"
+    "samples": "turbo run samples -F web --",
+    "audit:evidence": "pnpm --filter web audit:evidence"
   },
   "dependencies": {
     "@superfact/env": "workspace:*",

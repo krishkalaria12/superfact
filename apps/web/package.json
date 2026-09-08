@@ -9,6 +9,7 @@
     "build": "next build",
     "check-types": "tsc --noEmit",
     "test": "node --test src/lib/*.test.ts src/lib/grounding/*.test.ts src/lib/pairing/*.test.ts src/lib/adjudication/*.test.ts src/lib/extract/*.test.ts src/lib/parse/*.test.ts",
+    "audit:evidence": "node --experimental-strip-types scripts/audit-evidence.ts",
     "start": "next start",
     "samples": "node --experimental-strip-types scripts/write-samples.ts"
   },

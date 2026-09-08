@@ -211,6 +211,7 @@ behind the parts that look odd.
 | `pnpm build`             | Build all workspaces                                          |
 | `pnpm check-types`       | Typecheck across workspaces                                   |
 | `pnpm check`             | Oxlint + Oxfmt                                                |
-| `pnpm --filter web test` | node:test over normalization, pairing, adjudication, priority |
+| `pnpm --filter web test` | node:test over pipeline rules and retry behaviour             |
+| `pnpm audit:evidence`    | Verify every published quote and cited line against page text |
 | `pnpm db:push`           | Push schema to the database                                   |
 | `pnpm db:studio`         | Open Drizzle Studio                                           |
