@@ -182,7 +182,10 @@ function resolveFirstPass(
     };
   }
 
-  return { ...base, verdict: "contradicts", reasonCode: output.reasonCode };
+  // Once code has proved a value mismatch and matched every decisive field, the reason is no
+  // longer a model choice. Keeping it code-owned prevents internally impossible combinations such
+  // as `contradicts` with `exact_duplicate`.
+  return { ...base, verdict: "contradicts", reasonCode: "value_conflict" };
 }
 
 /**

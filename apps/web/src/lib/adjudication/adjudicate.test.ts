@@ -248,6 +248,7 @@ test("keeps a contradiction the review could not defuse, and says so", async () 
   const result = await adjudicatePairs([{ source, target }], model, "test");
 
   assert.equal(result.edges[0]?.verdict, "contradicts");
+  assert.equal(result.edges[0]?.reasonCode, "value_conflict");
   assert.equal(result.edges[0]?.priorPass, null);
   assert.ok(result.edges[0]?.explanation.includes("reversed-burden review"));
   assert.equal(result.stats.reviewed, 1);

@@ -32,6 +32,7 @@ export const edgeVerdict = pgEnum("edge_verdict", [
 export const edgeReasonCode = pgEnum("edge_reason_code", [
   "exact_duplicate",
   "equivalent_value",
+  "value_conflict",
   "time_supersession",
   "vintage_difference",
   "unit_mismatch",
