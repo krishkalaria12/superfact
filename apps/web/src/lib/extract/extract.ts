@@ -77,12 +77,17 @@ function diagnostic(id: string, reason: ExtractionDiagnostic["reason"], error: u
   return { inputId: id, reason, detail: error instanceof Error ? error.message : String(error) };
 }
 
-/** A model call failed or returned unusable structured output. The partial result aids diagnosis. */
+/**
+ * A model call itself failed, so the batch has a hole in it and should be retried.
+ *
+ * Only `model_error` reaches here. A single malformed candidate — a table value that does not match
+ * its cell, a cited line that does not exist — is dropped and counted instead, because failing the
+ * batch would throw away every good fact on four pages to punish one bad row. Those drops are not
+ * swallowed: they travel in `diagnostics` and land in the stage's wide event.
+ */
 export class ExtractionIncompleteError extends Error {
   constructor(public readonly result: ExtractionResult) {
-    const failures = result.diagnostics.filter(
-      (item) => item.reason === "model_error" || item.reason === "invalid_output",
-    );
+    const failures = result.diagnostics.filter((item) => item.reason === "model_error");
     super(
       `extraction incomplete: ${failures.map((item) => `${item.inputId}: ${item.detail}`).join("; ")}`,
     );
@@ -155,24 +160,12 @@ export async function extractAssertionCandidates(
     for (const modelCandidate of parsed.data) {
       const unknown = modelCandidate.evidence.lineIds.filter((id) => !work.allowedLineIds.has(id));
       if (unknown.length > 0) {
+        // Kept as a candidate anyway. The verbatim gate is what decides publication, and it will
+        // reject this for `line_not_found` with the invented id on the record — which is a more
+        // useful artifact in the failures view than a diagnostic nobody reads.
         diagnostics.push(
           diagnostic(work.id, "unknown_line_id", `candidate cited ${unknown.join(", ")}`),
         );
-        const converted = assertionCandidateSchema.parse({
-          ...modelCandidate,
-          source: work.tableCells ? "table" : "prose",
-          tableContext: null,
-          qualifiers: Object.fromEntries(
-            modelCandidate.qualifiers.map(({ key, value }) => [key, value]),
-          ),
-        });
-        candidates.push({
-          documentId: work.documentId,
-          pageNumbers: work.pageNumbers,
-          candidate: converted,
-          salience: computeSalience(converted, work.documentId, options.repetitionCorpus),
-        });
-        continue;
       }
 
       let sourceAndContext: Pick<AssertionCandidate, "source" | "tableContext"> = {
@@ -233,9 +226,7 @@ export async function extractAssertionCandidates(
   }
 
   const result = { candidates, diagnostics };
-  if (
-    diagnostics.some((item) => item.reason === "model_error" || item.reason === "invalid_output")
-  ) {
+  if (diagnostics.some((item) => item.reason === "model_error")) {
     throw new ExtractionIncompleteError(result);
   }
   return result;

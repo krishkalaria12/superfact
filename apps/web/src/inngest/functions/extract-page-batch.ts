@@ -1,12 +1,12 @@
 import { assertions, db, pages } from "@superfact/db";
 import type { NewAssertion } from "@superfact/db";
 import { unionBbox } from "@superfact/db/contracts";
-import { and, asc, eq, inArray, ne } from "@superfact/db/orm";
+import { and, asc, eq, inArray, ne, sql } from "@superfact/db/orm";
 
 import { useLogger } from "@/lib/evlog";
 import { extractAssertionCandidates } from "@/lib/extract";
 import { extractionModel } from "@/lib/extraction-model";
-import { groundCandidate } from "@/lib/grounding";
+import { findFiscalYearEndDay, groundCandidate } from "@/lib/grounding";
 import { extractionBatchRequested, inngest } from "../client";
 
 const INSERT_CHUNK = 100;
@@ -35,6 +35,17 @@ export const extractPageBatch = inngest.createFunction(
           ),
         )
         .orderBy(asc(pages.pageNumber));
+
+      // Read once per batch, over the whole document rather than these pages. A filing declares its
+      // year end in one place and then writes "FY24" everywhere; without this, every one of those
+      // labels is undatable and the grounding gate refuses it.
+      const [calendar] = await db
+        .select({
+          text: sql<string>`string_agg(${pages.text}, ' ' order by ${pages.pageNumber})`,
+        })
+        .from(pages)
+        .where(and(eq(pages.documentId, documentId), eq(pages.status, "parsed")));
+      const fiscalYearEndDay = calendar?.text ? findFiscalYearEndDay(calendar.text) : null;
 
       const corpus = await db
         .select({
@@ -92,7 +103,11 @@ export const extractPageBatch = inngest.createFunction(
         if (!page) continue;
         const lineById = new Map(page.lines.map((line) => [line.id, line]));
         const candidate = extracted.candidate;
-        const grounded = groundCandidate(candidate, { text: page.text, lines: page.lines });
+        const grounded = groundCandidate(
+          candidate,
+          { text: page.text, lines: page.lines },
+          { fiscalYearEndDay },
+        );
         if (grounded.status === "published") published += 1;
 
         rows.push({

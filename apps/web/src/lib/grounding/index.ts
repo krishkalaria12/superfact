@@ -8,10 +8,12 @@ export {
 } from "./gates";
 export { groundCandidate, type GroundedCandidate } from "./ground";
 export {
+  findFiscalYearEndDay,
   findPeriodInSource,
   normalizePeriod,
   normalizeValue,
   verifyValueInSource,
+  type FiscalYearEndDay,
   type NormalizationFailure,
   type NormalizationResult,
   type NormalizedValue,

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizePeriod, normalizeValue, verifyValueInSource } from "./normalize.ts";
+import {
+  findFiscalYearEndDay,
+  normalizePeriod,
+  normalizeValue,
+  verifyValueInSource,
+} from "./normalize.ts";
 
 function value(
   rawValue: string,
@@ -161,4 +166,35 @@ test("returns a precise failure for unsupported and invalid periods", () => {
     assert.equal(result.failure.reason, "normalization_failed");
     assert.match(result.failure.detail, /unsupported/);
   }
+});
+
+test("dates a fiscal label from the calendar the document states elsewhere", () => {
+  const day = findFiscalYearEndDay(
+    "Consolidated results for the year ended March 31, 2024. Segment tables follow.",
+  );
+
+  assert.deepEqual(day, { month: 3, day: 31 });
+
+  // The same calendar dates a different fiscal year, which is the point of storing month and day
+  // rather than the one date the document happened to print.
+  const fy22 = normalizePeriod("FY2022", { fiscalYearEndDay: day! });
+  assert.equal(fy22.ok, true);
+  assert.deepEqual(fy22.ok && fy22.value, {
+    start: "2021-04-01",
+    end: "2022-03-31",
+    precision: "fiscal_year",
+  });
+});
+
+test("assumes no fiscal calendar when the document never states one", () => {
+  assert.equal(findFiscalYearEndDay("Revenue grew in FY24 across every segment."), null);
+  assert.equal(normalizePeriod("FY2024").ok, false);
+});
+
+test("takes the calendar a document uses most when it names several", () => {
+  const day = findFiscalYearEndDay(
+    "for the year ended March 31, 2024 ... year ended March 31, 2022 ... period ended December 31, 2023",
+  );
+
+  assert.deepEqual(day, { month: 3, day: 31 });
 });

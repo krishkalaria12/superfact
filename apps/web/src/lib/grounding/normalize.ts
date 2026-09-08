@@ -310,23 +310,81 @@ function validDate(year: number, month: number, day: number): boolean {
   return month >= 1 && month <= 12 && day >= 1 && day <= lastDay(year, month);
 }
 
+/** The twelve months ending on `end`, inclusive at both ends. */
+function boundsEndingAt(end: string): { start: string; end: string } {
+  const start = new Date(`${end}T00:00:00Z`);
+  start.setUTCFullYear(start.getUTCFullYear() - 1);
+  start.setUTCDate(start.getUTCDate() + 1);
+  return { start: start.toISOString().slice(0, 10), end };
+}
+
+/**
+ * The fiscal calendar a document states about itself, or null when it never says.
+ *
+ * Searched over the document's whole text rather than the span an assertion cites, because a filing
+ * declares its year end once — on a cover page, in a header, in a note — and then writes "FY24" a
+ * hundred times. Refusing to date those hundred because the declaration is on another page rejected
+ * half of a real document's candidates; reading it from the document is the same move the parser
+ * already makes when it takes a table's unit from the governing header rather than the cell.
+ *
+ * Nothing is assumed. A document that never states a year end still gets no fiscal dates.
+ */
+export function findFiscalYearEndDay(text: string): FiscalYearEndDay | null {
+  const pattern =
+    /\b(?:year|period)\s+ende[dr](?:\s+on)?\s+((?:\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+,?\s+\d{4})|(?:[A-Za-z]+\s+\d{1,2},?\s+\d{4})|(?:\d{4}-\d{2}-\d{2}))/gi;
+
+  const seen = new Map<string, number>();
+  for (const match of clean(text).matchAll(pattern)) {
+    const parsed = normalizePeriod(match[1]!);
+    if (!parsed.ok || parsed.value.precision !== "day") continue;
+    const key = parsed.value.end.slice(5);
+    seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
+
+  // A document may mention several year ends; the calendar is the one it uses most.
+  const [best] = [...seen.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  if (!best) return null;
+
+  const [month, day] = best[0].split("-").map(Number);
+  return month && day ? { month, day } : null;
+}
+
+/**
+ * The month and day a document's financial year ends on, with no year attached.
+ *
+ * A fiscal calendar is a month and a day; only the year moves. Reading "year ended March 31, 2024"
+ * off a document therefore also tells you when its FY2022 ended, which is what lets one statement
+ * anywhere in the document date every fiscal label in it.
+ */
+export type FiscalYearEndDay = { month: number; day: number };
+
 /** Converts an explicit date or named reporting period to inclusive ISO bounds. */
 export function normalizePeriod(
   raw: string,
-  options: { fiscalYearEnd?: string } = {},
+  options: { fiscalYearEnd?: string; fiscalYearEndDay?: FiscalYearEndDay } = {},
 ): NormalizationResult<Period> {
   const value = clean(raw);
   let match: RegExpMatchArray | null;
 
   const fiscalBounds = (endYear: number) => {
-    if (!options.fiscalYearEnd) return null;
-    const end = normalizePeriod(options.fiscalYearEnd);
-    if (!end.ok || end.value.precision !== "day" || Number(end.value.end.slice(0, 4)) !== endYear)
-      return null;
-    const start = new Date(`${end.value.end}T00:00:00Z`);
-    start.setUTCFullYear(start.getUTCFullYear() - 1);
-    start.setUTCDate(start.getUTCDate() + 1);
-    return { start: start.toISOString().slice(0, 10), end: end.value.end };
+    // The document's own calendar, applied to whichever year the label names. Falls back to an
+    // explicit year-end date when the two disagree about the year.
+    const day = options.fiscalYearEndDay;
+    const explicit =
+      options.fiscalYearEnd ??
+      (day && validDate(endYear, day.month, day.day)
+        ? iso(endYear, day.month, day.day)
+        : undefined);
+    if (!explicit) return null;
+
+    const end = normalizePeriod(explicit);
+    if (!end.ok || end.value.precision !== "day" || Number(end.value.end.slice(0, 4)) !== endYear) {
+      if (!day || !validDate(endYear, day.month, day.day)) return null;
+      const synthesized = normalizePeriod(iso(endYear, day.month, day.day));
+      if (!synthesized.ok) return null;
+      return boundsEndingAt(synthesized.value.end);
+    }
+    return boundsEndingAt(end.value.end);
   };
 
   match = value.match(/^(?:fy|fiscal\s+year)\s*['’]?(\d{2}|\d{4})(?:\s*[-/]\s*(\d{2}|\d{4}))?$/i);

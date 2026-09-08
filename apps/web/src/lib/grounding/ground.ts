@@ -3,6 +3,7 @@ import type { AssertionCandidate, Period } from "@superfact/db/contracts";
 
 import { applyGroundingGates, type GroundingPage } from "./gates.ts";
 import {
+  type FiscalYearEndDay,
   findPeriodInSource,
   normalizePeriod,
   normalizeValue,
@@ -51,7 +52,17 @@ function fiscalYearEnd(sources: readonly string[]): Period | null {
   return null;
 }
 
-function candidatePeriod(candidate: AssertionCandidate): Period | null {
+/**
+ * What the document says about when, if anything.
+ *
+ * The document's own fiscal calendar is the last resort, after the candidate's qualifiers, its
+ * table headers, and its quote. A local statement always wins: a column headed "year ended 31
+ * December 2024" describes that column whatever the rest of the filing does.
+ */
+function candidatePeriod(
+  candidate: AssertionCandidate,
+  fiscalYearEndDay?: FiscalYearEndDay | null,
+): Period | null {
   const context = candidate.tableContext;
   const sources = [
     context?.columnHeader,
@@ -61,15 +72,20 @@ function candidatePeriod(candidate: AssertionCandidate): Period | null {
   ].filter((value): value is string => Boolean(value?.trim()));
   const explicitEnd = fiscalYearEnd(sources);
 
+  const options = {
+    fiscalYearEnd: explicitEnd?.end,
+    fiscalYearEndDay: fiscalYearEndDay ?? undefined,
+  };
+
   if (candidate.valueType === "date") {
-    const normalized = normalizePeriod(candidate.rawValue, { fiscalYearEnd: explicitEnd?.end });
+    const normalized = normalizePeriod(candidate.rawValue, options);
     return normalized.ok ? normalized.value : null;
   }
 
   for (const [key, value] of Object.entries(candidate.qualifiers)) {
     const normalizedKey = key.toLowerCase().replaceAll(/[^a-z0-9]+/g, "_");
     if (PERIOD_KEY.test(normalizedKey)) {
-      const normalized = normalizePeriod(value, { fiscalYearEnd: explicitEnd?.end });
+      const normalized = normalizePeriod(value, options);
       if (normalized.ok) return normalized.value;
       const embedded = findPeriodInSource(value);
       if (embedded) return embedded;
@@ -96,6 +112,7 @@ function rejected(
 export function groundCandidate(
   candidate: AssertionCandidate,
   page: GroundingPage,
+  options: { fiscalYearEndDay?: FiscalYearEndDay | null } = {},
 ): GroundedCandidate {
   const gates = applyGroundingGates(candidate, page);
   const governingUnit = [candidate.unit, candidate.tableContext?.unitLine]
@@ -105,9 +122,9 @@ export function groundCandidate(
     rawValue: candidate.rawValue,
     valueType: candidate.valueType,
     unit: governingUnit || null,
-    fiscalYearEnd: candidatePeriod(candidate)?.end,
+    fiscalYearEnd: candidatePeriod(candidate, options.fiscalYearEndDay)?.end,
   });
-  const period = candidatePeriod(candidate);
+  const period = candidatePeriod(candidate, options.fiscalYearEndDay);
   const base = {
     canonicalValue: normalized.ok ? normalized.value.canonicalValue : null,
     canonicalNumber: normalized.ok ? normalized.value.canonicalNumber : null,
