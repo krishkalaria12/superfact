@@ -195,6 +195,38 @@ function findRuns(rows: Band[]): { start: number; end: number }[] {
 }
 
 /**
+ * Split two grids that touch vertically but introduce a fresh multi-cell heading block.
+ *
+ * A page can put a compact summary grid immediately above a time-series table. With only one or
+ * two single-line section labels between them, `findRuns` correctly sees uninterrupted tabular
+ * layout, but the two grids do not share columns. Treating them as one makes long labels in the
+ * summary overlap and collapse the year columns below. A multi-cell non-value row after values,
+ * followed by more values, is the coordinate-level signal that the column grammar restarted.
+ */
+function splitAtHeaderRestarts(rows: Band[]): { start: number; end: number }[] {
+  const segments: { start: number; end: number }[] = [];
+  let start = 0;
+  let sawBody = false;
+
+  rows.forEach((row, index) => {
+    if (isBodyRow(row)) {
+      sawBody = true;
+      return;
+    }
+
+    const laterBody = rows.slice(index + 1).some(isBodyRow);
+    if (sawBody && row.lines.length >= MIN_CELLS_PER_ROW && laterBody) {
+      segments.push({ start, end: index - 1 });
+      start = index;
+      sawBody = false;
+    }
+  });
+
+  segments.push({ start, end: rows.length - 1 });
+  return segments;
+}
+
+/**
  * The largest-type line above the table is its title.
  *
  * Proximity alone picks the wrong line: on the Delhivery balance sheet the nearest heading above
@@ -272,64 +304,72 @@ export function reconstructTables(
 
     for (const run of findRuns(rows)) {
       const spanned = rows.slice(run.start, run.end + 1);
-      const firstBody = spanned.findIndex(isBodyRow);
-      const lastBody = spanned.findLastIndex(isBodyRow);
+      const segments = splitAtHeaderRestarts(spanned);
 
-      // No row of values means this was never a table. Prose sets rows of two and three fragments
-      // all the time — an auditors' report, a governance disclosure, a signature block — and
-      // filing those as tables that failed to resolve would point a later vision read at pages of
-      // running text. A grid is only a grid once something in it is a value.
-      if (firstBody === -1) continue;
+      for (const [segmentIndex, segment] of segments.entries()) {
+        const segmentRows = spanned.slice(segment.start, segment.end + 1);
+        const firstBody = segmentRows.findIndex(isBodyRow);
+        const lastBody = segmentRows.findLastIndex(isBodyRow);
 
-      // The run is trimmed to its last row of values. Footnotes below a table wrap into two or
-      // three segments that cluster as multi-cell rows, and one of those spanning the full table
-      // width would otherwise merge every column into one.
-      const gridded = spanned.slice(0, lastBody + 1);
+        // No row of values means this was never a table. Prose sets rows of two and three fragments
+        // all the time — an auditors' report, a governance disclosure, a signature block — and
+        // filing those as tables that failed to resolve would point a later vision read at pages of
+        // running text. A grid is only a grid once something in it is a value.
+        if (firstBody === -1) continue;
 
-      // Everything before the first row of values is heading. Single-cell rows in that stretch are
-      // section labels, not column headings, and are left out rather than joined into one.
-      const headerRows =
-        firstBody <= 0
-          ? []
-          : gridded.slice(0, firstBody).filter((row) => row.lines.length >= MIN_CELLS_PER_ROW);
-      const bodyRows = gridded.slice(firstBody);
-      const columns = assignColumns(bodyRows.filter(isBodyRow));
+        // The run is trimmed to its last row of values. Footnotes below a table wrap into two or
+        // three segments that cluster as multi-cell rows, and one of those spanning the full table
+        // width would otherwise merge every column into one.
+        const gridded = segmentRows.slice(0, lastBody + 1);
 
-      const above = rows.slice(0, run.start).flatMap((row) => row.lines);
-      const below = rows.slice(run.start + lastBody + 1).flatMap((row) => row.lines);
+        // Everything before the first row of values is heading. Single-cell rows in that stretch
+        // are section labels, not column headings, and are left out rather than joined into one.
+        const headerRows =
+          firstBody <= 0
+            ? []
+            : gridded.slice(0, firstBody).filter((row) => row.lines.length >= MIN_CELLS_PER_ROW);
+        const bodyRows = gridded.slice(firstBody);
+        const columns = assignColumns(bodyRows.filter(isBodyRow));
 
-      const bbox =
-        unionBbox(gridded.flatMap((row) => row.lines.map((line) => line.bbox))) ??
-        ({ x0: band.x0, y0: 0, x1: band.x1, y1: 0 } satisfies Bbox);
+        const globalStart = run.start + segment.start;
+        const above = rows.slice(0, globalStart).flatMap((row) => row.lines);
+        const nextSegment = segments[segmentIndex + 1];
+        const belowEnd = nextSegment ? run.start + nextSegment.start : rows.length;
+        const below = rows.slice(globalStart + lastBody + 1, belowEnd).flatMap((row) => row.lines);
 
-      // A grid nobody can read a column out of is worse than no grid: it attaches real numbers to
-      // the wrong heading, and the evidence gate cannot catch that because the quote is genuine.
-      // This now means what it says — a real grid that would not resolve, worth a vision read.
-      const ragged =
-        columns.length < MIN_CELLS_PER_ROW ? `only ${columns.length} column(s) resolved` : null;
+        const bbox =
+          unionBbox(gridded.flatMap((row) => row.lines.map((line) => line.bbox))) ??
+          ({ x0: band.x0, y0: 0, x1: band.x1, y1: 0 } satisfies Bbox);
 
-      // A table continued past a page break or a section heading has no heading row of its own.
-      // Taking the previous table's headings, when the grids line up, is the difference between
-      // eighteen rows of real balance-sheet values and eighteen rows nothing can label.
-      const continued =
-        headerRows.length === 0
-          ? (tables.findLast(
-              (t) => t.bandIndex === band.index && t.columnHeaders.length === columns.length,
-            )?.columnHeaders ?? [])
-          : buildColumnHeaders(headerRows, columns);
+        // A grid nobody can read a column out of is worse than no grid: it attaches real numbers to
+        // the wrong heading, and the evidence gate cannot catch that because the quote is genuine.
+        // This now means what it says — a real grid that would not resolve, worth a vision read.
+        const ragged =
+          columns.length < MIN_CELLS_PER_ROW ? `only ${columns.length} column(s) resolved` : null;
 
-      tables.push({
-        id: `p${pageNumber}t${tables.length + 1}`,
-        bandIndex: band.index,
-        bbox,
-        quality: ragged ? "ragged" : "clean",
-        raggedReason: ragged,
-        title: findTitle(above, CONTEXT_REACH),
-        unitLine: findUnitLine(above),
-        columnHeaders: ragged ? [] : continued,
-        footnotes: below.filter((line) => FOOTNOTE.test(line.text)).map((line) => line.text),
-        rows: ragged ? [] : bodyRows.map((row) => toRow(row, columns)),
-      });
+        // A table continued past a page break or a section heading has no heading row of its own.
+        // Taking the previous table's headings, when the grids line up, is the difference between
+        // eighteen rows of real balance-sheet values and eighteen rows nothing can label.
+        const continued =
+          headerRows.length === 0
+            ? (tables.findLast(
+                (t) => t.bandIndex === band.index && t.columnHeaders.length === columns.length,
+              )?.columnHeaders ?? [])
+            : buildColumnHeaders(headerRows, columns);
+
+        tables.push({
+          id: `p${pageNumber}t${tables.length + 1}`,
+          bandIndex: band.index,
+          bbox,
+          quality: ragged ? "ragged" : "clean",
+          raggedReason: ragged,
+          title: findTitle(above, CONTEXT_REACH),
+          unitLine: findUnitLine(above),
+          columnHeaders: ragged ? [] : continued,
+          footnotes: below.filter((line) => FOOTNOTE.test(line.text)).map((line) => line.text),
+          rows: ragged ? [] : bodyRows.map((row) => toRow(row, columns)),
+        });
+      }
     }
   }
 
