@@ -907,7 +907,10 @@
                   </tr>
                   <tr>
                     <td>Models</td>
-                    <td>GPT-5.6 Luna; GPT-5.6 Terra; Terra high; text-embedding-3-small</td>
+                    <td>
+                      OpenAI by default: GPT-5.6 Luna, GPT-5.6 Terra, text-embedding-3-small. Gemini
+                      option: Gemini 3.8 Flash, gemini-embedding-2
+                    </td>
                     <td>
                       Bulk extraction; pair adjudication; the contradiction second pass only;
                       subject and predicate vectors for retrieval
@@ -1192,10 +1195,11 @@
                           column on assertions.
                         </li>
                         <li>
-                          Embeddings are <code>text-embedding-3-small</code> at its full 1536
-                          dimensions, so the column is <code>vector(1536)</code>. The dimension is
-                          fixed at schema time and changing it re-embeds every assertion, so it is
-                          decided here rather than at phase 06.
+                          Embeddings use <code>text-embedding-3-small</code> by default or
+                          <code>gemini-embedding-2</code> when Gemini is selected. Both write 1536
+                          dimensions, so the column is <code>vector(1536)</code>. The pipeline
+                          version includes the provider because changing embedding spaces requires
+                          every assertion to be re-embedded.
                         </li>
                       </ul>
                     </div>

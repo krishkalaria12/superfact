@@ -32,6 +32,18 @@ pnpm dev
 `pnpm dev` starts the app on http://localhost:3001 and the Inngest dev server on
 http://localhost:8288. Neither Inngest key is needed locally.
 
+OpenAI is the default. To run the same pipeline with Gemini, set these two values instead:
+
+```bash
+AI_PROVIDER=gemini
+GOOGLE_GENERATIVE_AI_API_KEY=your-google-ai-studio-key
+```
+
+Create the key in [Google AI Studio](https://aistudio.google.com/app/apikey). The inactive
+provider's key is optional. Switching providers changes the pipeline version, so stored documents
+must be reprocessed before they appear in the current export. Embeddings from different models
+cannot be compared safely.
+
 Then drop a PDF on the home page. Facts appear while later pages are still being read.
 
 The six starter PDFs live under `docs/starter-datasets/` locally but are not committed — they are
@@ -84,17 +96,17 @@ owns what differs; the model owns what it means and may only fill a gap code cou
 
 ### Stack
 
-| Concern | Choice                                                                               |
-| ------- | ------------------------------------------------------------------------------------ |
-| App     | Next.js App Router, TypeScript                                                       |
-| Parsing | MuPDF.js (`mupdf`, WASM). Structured text, geometry, page rasters                    |
-| Models  | GPT-5.6 Luna (extraction), Terra (adjudication), Terra high (contradiction re-check) |
-| Vectors | `text-embedding-3-small` at 1536 dimensions, over subject and predicate text only    |
-| Jobs    | Inngest. Stages: parse, extract, relate                                              |
-| Logs    | evlog. One wide event per request, drained to `.evlog/logs` as NDJSON                |
-| Data    | Neon PostgreSQL + pgvector, Drizzle ORM                                              |
-| Files   | UploadThing                                                                          |
-| UI      | Tailwind, shadcn/ui via `packages/ui`                                                |
+| Concern | Choice                                                                           |
+| ------- | -------------------------------------------------------------------------------- |
+| App     | Next.js App Router, TypeScript                                                   |
+| Parsing | MuPDF.js (`mupdf`, WASM). Structured text, geometry, page rasters                |
+| Models  | OpenAI GPT-5.6 Luna/Terra by default; Gemini 3.8 Flash when selected             |
+| Vectors | OpenAI `text-embedding-3-small` or `gemini-embedding-2`, both at 1536 dimensions |
+| Jobs    | Inngest. Stages: parse, extract, relate                                          |
+| Logs    | evlog. One wide event per request, drained to `.evlog/logs` as NDJSON            |
+| Data    | Neon PostgreSQL + pgvector, Drizzle ORM                                          |
+| Files   | UploadThing                                                                      |
+| UI      | Tailwind, shadcn/ui via `packages/ui`                                            |
 
 Everything runs in one TypeScript process. No Python service, no OCR, no second parser.
 
@@ -106,10 +118,10 @@ then cut down hard: revision 1 had thirteen tables, seven verdicts, a Python par
 accuracy harness. Revision 2 has five tables, four verdicts, one parser, and no benchmark. The
 changelog at the bottom of the plan says why each thing went.
 
-Three models run inside the product: `gpt-5.6-luna` extracts, `gpt-5.6-terra` adjudicates, and Terra
-at high reasoning effort runs the contradiction second pass. Escalation answers to exactly one
-condition — a first pass that said `contradicts` — rather than to a general risk score, which is
-what keeps the expensive call to tens of pairs instead of thousands.
+With the default provider, `gpt-5.6-luna` extracts and `gpt-5.6-terra` adjudicates. With Gemini,
+`gemini-3.8-flash` does both jobs. The selected model uses high reasoning only for a contradiction
+second pass. `text-embedding-3-small` is the OpenAI embedding model and `gemini-embedding-2` is the
+Gemini model. Both write 1536 dimensions to the existing pgvector column.
 
 ## Limitations and next steps
 

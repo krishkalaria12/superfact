@@ -1,6 +1,8 @@
 import type { AssertionCandidate, ParsedLine, ReconstructedTable } from "@superfact/db/contracts";
 import type { z } from "zod";
 
+export { PermanentModelFailure } from "../model-errors.ts";
+
 export type ExtractionPage = {
   documentId: string;
   pageNumber: number;
@@ -54,10 +56,19 @@ export interface StructuredOutputModel {
   generate<T>(request: StructuredOutputRequest<T>): Promise<unknown>;
 }
 
+/** The provider returned content but the SDK could not shape it into the requested schema. */
+export class StructuredOutputFailure extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "StructuredOutputFailure";
+  }
+}
+
 export type ExtractionDiagnostic = {
   inputId: string;
   reason: "invalid_output" | "unknown_line_id" | "model_error";
   detail: string;
+  permanent?: boolean;
 };
 
 export type ExtractedCandidate = {

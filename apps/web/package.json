@@ -8,11 +8,12 @@
     "dev:inngest": "inngest-cli dev --no-discovery -u http://localhost:3001/api/inngest",
     "build": "next build",
     "check-types": "tsc --noEmit",
-    "test": "node --test src/lib/grounding/*.test.ts src/lib/pairing/*.test.ts src/lib/adjudication/*.test.ts src/lib/extract/*.test.ts",
+    "test": "node --test src/lib/*.test.ts src/lib/grounding/*.test.ts src/lib/pairing/*.test.ts src/lib/adjudication/*.test.ts src/lib/extract/*.test.ts src/lib/parse/*.test.ts",
     "start": "next start",
     "samples": "node --experimental-strip-types scripts/write-samples.ts"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.64",
     "@ai-sdk/openai": "^4.0.60",
     "@superfact/db": "workspace:*",
     "@superfact/env": "workspace:*",

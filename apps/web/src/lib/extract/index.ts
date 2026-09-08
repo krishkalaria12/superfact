@@ -6,6 +6,7 @@ export { PAGES_PER_EXTRACTION_BATCH, pagePriority, planExtractionBatches } from 
 export type { PagePriorityInput } from "./priority.ts";
 export { assertionSignature, computeSalience } from "./salience.ts";
 export { batchTableInputs, buildTableInputs } from "./tables.ts";
+export { PermanentModelFailure, StructuredOutputFailure } from "./types.ts";
 export type {
   ExtractedCandidate,
   ExtractionDiagnostic,

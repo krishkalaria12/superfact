@@ -16,8 +16,11 @@ export const env = createEnv({
     // Neon Postgres. The single canonical database.
     DATABASE_URL: z.string().min(1),
 
-    // Model provider for extraction and adjudication. Required from phase 04.
-    OPENAI_API_KEY: z.string().min(1),
+    // Model provider for extraction, adjudication, and embeddings. OpenAI is the default.
+    // Only the key for the selected provider is read, starting in phase 04.
+    AI_PROVIDER: z.enum(["openai", "gemini"]).default("openai"),
+    OPENAI_API_KEY: z.string().min(1).optional(),
+    GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1).optional(),
 
     // UploadThing, for original PDF bytes and rendered page rasters. Required from phase 02:
     // uploads are the only way a document enters the system, so the app is inert without it.

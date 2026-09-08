@@ -32,10 +32,12 @@ Do not add these back without asking: Python or any second service, OCR, a secon
 browser-side PDF.js, accuracy metrics, gold sets, or benchmark evaluation. Each was considered and
 cut, and the plan's changelog says why.
 
-Models are named in the plan and pinned in code: `gpt-5.6-luna` extracts, `gpt-5.6-terra` adjudicates,
-Terra at `reasoningEffort: "high"` runs the contradiction second pass, and `text-embedding-3-small`
-serves retrieval. Escalation answers to one condition — a first pass that said `contradicts` — and
-never to a general risk score.
+Models are pinned per provider in `apps/web/src/lib/ai-provider-config.ts`. OpenAI is the default:
+`gpt-5.6-luna` extracts, `gpt-5.6-terra` adjudicates, and `text-embedding-3-small` serves retrieval.
+When `AI_PROVIDER=gemini`, `gemini-3.8-flash` extracts and adjudicates while
+`gemini-embedding-2` serves retrieval at 1536 dimensions. The selected adjudicator uses high
+reasoning only for a first pass that said `contradicts`. The provider name is part of the pipeline
+version because embeddings from two providers are not comparable.
 
 Parsing is `mupdf` (WASM) in-process. The evidence viewer draws boxes on stored page rasters using
 the coordinates the parser emitted, so parser and viewer share one coordinate space. Rasters are
@@ -77,7 +79,8 @@ An environment variable is required only from the phase that first reads it. `DA
 `UPLOADTHING_TOKEN` are both required now — uploads are the only way a document enters the system,
 so the app is inert without storage. `apps/web/.env.example` records which phase claims each one.
 
-Embeddings are `text-embedding-3-small` at 1536 dimensions, over subject and predicate text only.
+Embeddings are `text-embedding-3-small` or `gemini-embedding-2` at 1536 dimensions, over subject and
+predicate text only.
 They serve retrieval in candidate pairing and nothing else: a verdict never rests on similarity, and
 numbers never go through vectors — ₹7,225 crore and ₹72.25 billion are a coin flip in vector space.
 The dimension is fixed in the schema, so changing the model means a migration and a full re-embed.

@@ -1,8 +1,15 @@
-import { openai } from "@ai-sdk/openai";
 import { EMBEDDING_DIMENSIONS } from "@superfact/db/schema/assertions";
-import { embedMany } from "ai";
+import { APICallError, embedMany } from "ai";
 
-export const EMBEDDING_MODEL = "text-embedding-3-small";
+import {
+  AI_PROVIDER,
+  embeddingLanguageModel,
+  embeddingProviderOptions,
+  SELECTED_MODELS,
+} from "@/lib/ai-provider";
+import { PermanentModelFailure } from "@/lib/model-errors";
+
+export const EMBEDDING_MODEL = SELECTED_MODELS.embedding;
 
 /**
  * What gets embedded: subject and predicate, nothing else.
@@ -14,7 +21,8 @@ export const EMBEDDING_MODEL = "text-embedding-3-small";
 export function assertionEmbeddingText(
   assertion: Readonly<{ subject: string; predicate: string }>,
 ): string {
-  return `${assertion.subject.trim()}: ${assertion.predicate.trim()}`;
+  const claim = `${assertion.subject.trim()}: ${assertion.predicate.trim()}`;
+  return AI_PROVIDER === "gemini" ? `task: sentence similarity | query: ${claim}` : claim;
 }
 
 /** The small surface pairing needs, kept behind an interface so tests never reach the network. */
@@ -26,11 +34,21 @@ export const embeddingModel: EmbeddingModel = {
   async embed(values) {
     if (values.length === 0) return [];
 
-    const { embeddings } = await embedMany({
-      model: openai.embeddingModel(EMBEDDING_MODEL),
-      values: [...values],
-      maxParallelCalls: 4,
-    });
+    let embeddings: number[][];
+    try {
+      ({ embeddings } = await embedMany({
+        model: embeddingLanguageModel(),
+        values: [...values],
+        maxParallelCalls: 4,
+        maxRetries: 0,
+        providerOptions: embeddingProviderOptions(EMBEDDING_DIMENSIONS),
+      }));
+    } catch (error) {
+      if (APICallError.isInstance(error) && !error.isRetryable) {
+        throw new PermanentModelFailure(error.message, { cause: error });
+      }
+      throw error;
+    }
 
     // The column is fixed at 1536. A provider returning anything else would be rejected by
     // Postgres one insert later, with a far less obvious message than this one.
