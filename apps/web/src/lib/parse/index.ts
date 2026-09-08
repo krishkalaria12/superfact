@@ -5,11 +5,11 @@ import { eq } from "@superfact/db/orm";
 import * as mupdf from "mupdf";
 
 import { pageRasterObjectId, putObject } from "@/lib/storage";
-import { detectBands } from "./bands";
+import { detectBands } from "./bands.ts";
 import { mapWithConcurrency } from "@/lib/concurrency";
-import { RASTER_SCALE, renderPage } from "./raster";
-import { readPageGeometry } from "./structured-text";
-import { reconstructTables } from "./tables";
+import { RASTER_SCALE, renderPage } from "./raster.ts";
+import { readPageGeometry } from "./structured-text.ts";
+import { reconstructTables } from "./tables.ts";
 
 /**
  * The parse stage: text, geometry, tables, and one raster per page.

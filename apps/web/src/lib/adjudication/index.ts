@@ -1,11 +1,11 @@
-export { adjudicatePairs, orderPair, type AdjudicationResult } from "./adjudicate";
-export { compareAssertions, DECISIVE_FIELDS } from "./compare";
+export { adjudicatePairs, orderPair, type AdjudicationResult } from "./adjudicate.ts";
+export { compareAssertions, DECISIVE_FIELDS } from "./compare.ts";
 export {
   ADJUDICATION_SYSTEM_PROMPT,
   adjudicationPrompt,
   CONTRADICTION_REVIEW_SYSTEM_PROMPT,
   contradictionReviewPrompt,
-} from "./prompts";
+} from "./prompts.ts";
 export type {
   AdjudicationAssertion,
   AdjudicationModel,
@@ -15,4 +15,4 @@ export type {
   AdjudicationSkipReason,
   AdjudicationStats,
   DeterministicComparison,
-} from "./types";
+} from "./types.ts";

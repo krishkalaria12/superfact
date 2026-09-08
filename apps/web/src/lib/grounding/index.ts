@@ -5,8 +5,8 @@ export {
   type GateDecision,
   type GateRejection,
   type GroundingPage,
-} from "./gates";
-export { groundCandidate, type GroundedCandidate } from "./ground";
+} from "./gates.ts";
+export { groundCandidate, type GroundedCandidate } from "./ground.ts";
 export {
   findFiscalYearEndDay,
   findPeriodInSource,
@@ -18,4 +18,4 @@ export {
   type NormalizationResult,
   type NormalizedValue,
   type SourceVerificationFailure,
-} from "./normalize";
+} from "./normalize.ts";

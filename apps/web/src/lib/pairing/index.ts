@@ -4,9 +4,9 @@ export {
   DEFAULT_MIN_PREDICATE_RELATION,
   DEFAULT_MIN_SEMANTIC_SIMILARITY,
   DEFAULT_TOP_K,
-} from "./pair";
-export { pairDocument, type PairingRun } from "./pair-document";
-export { tokenAffinity } from "./predicates";
+} from "./pair.ts";
+export { pairDocument, type PairingRun } from "./pair-document.ts";
+export { tokenAffinity } from "./predicates.ts";
 export {
   DETERMINISTIC_ROW_LIMIT,
   readAssertionsById,
@@ -15,7 +15,7 @@ export {
   retrieveDeterministic,
   retrieveSemantic,
   writeAssertionEmbeddings,
-} from "./retrieval";
+} from "./retrieval.ts";
 export type {
   CandidatePair,
   PairingAssertion,
@@ -26,5 +26,5 @@ export type {
   PairingResult,
   PairingStats,
   RetrievedPair,
-} from "./types";
-export { canonicalValuesEqual, unitsComparable, valueTypesCompatible } from "./values";
+} from "./types.ts";
+export { canonicalValuesEqual, unitsComparable, valueTypesCompatible } from "./values.ts";
