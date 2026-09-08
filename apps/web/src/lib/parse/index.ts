@@ -77,6 +77,14 @@ function readOnePage(document: mupdf.Document, index: number): RenderedPage {
     page = document.loadPage(index);
     const bounds = page.getBounds();
     const geometry = readPageGeometry(page, pageNumber);
+    if (geometry.lines.length === 0) {
+      return {
+        ok: false,
+        pageNumber,
+        reason: "no_text_layer",
+        detail: "page contains no extractable text",
+      };
+    }
     const bands = detectBands(geometry.lines, bounds[2] - bounds[0]);
 
     return {
