@@ -4,6 +4,7 @@ import type { EdgeReasonCode } from "@superfact/db/schema/edges";
 import { z } from "zod";
 
 import { mapWithConcurrency } from "../concurrency.ts";
+import { PermanentModelFailure } from "../model-errors.ts";
 import { compareAssertions, DECISIVE_FIELDS } from "./compare.ts";
 import {
   ADJUDICATION_SYSTEM_PROMPT,
@@ -324,7 +325,10 @@ export async function adjudicatePairs(
     async (pair): Promise<Judged | AdjudicationSkip> => {
       try {
         return await adjudicateOne(pair, model, pipelineVersion);
-      } catch {
+      } catch (error) {
+        if (error instanceof PermanentModelFailure) {
+          return skip(`${pair.source.id}:${pair.target.id}`, "model_error", error);
+        }
         // One more attempt before giving up on the pair. Structured output that failed to parse
         // usually parses on a second sampling, and a transient provider error always does.
       }

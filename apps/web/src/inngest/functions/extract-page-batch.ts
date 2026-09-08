@@ -2,9 +2,10 @@ import { assertions, db, pages } from "@superfact/db";
 import type { NewAssertion } from "@superfact/db";
 import { unionBbox } from "@superfact/db/contracts";
 import { and, asc, eq, inArray, ne, sql } from "@superfact/db/orm";
+import { NonRetriableError } from "inngest";
 
 import { useLogger } from "@/lib/evlog";
-import { extractAssertionCandidates } from "@/lib/extract";
+import { extractAssertionCandidates, ExtractionIncompleteError } from "@/lib/extract";
 import { extractionModel } from "@/lib/extraction-model";
 import { findFiscalYearEndDay, groundCandidate } from "@/lib/grounding";
 import { extractionBatchRequested, inngest } from "../client";
@@ -22,158 +23,165 @@ export const extractPageBatch = inngest.createFunction(
   async ({ attempt, event, step }) => {
     const { jobId, documentId, pipelineVersion, pageNumbers } = event.data;
 
-    return step.run("extract", async () => {
-      const startedAt = Date.now();
-      const parsedPages = await db
-        .select()
-        .from(pages)
-        .where(
-          and(
-            eq(pages.documentId, documentId),
-            eq(pages.status, "parsed"),
-            inArray(pages.pageNumber, pageNumbers),
-          ),
-        )
-        .orderBy(asc(pages.pageNumber));
-
-      // Read once per batch, over the whole document rather than these pages. A filing declares its
-      // year end in one place and then writes "FY24" everywhere; without this, every one of those
-      // labels is undatable and the grounding gate refuses it.
-      const [calendar] = await db
-        .select({
-          text: sql<string>`string_agg(${pages.text}, ' ' order by ${pages.pageNumber})`,
-        })
-        .from(pages)
-        .where(and(eq(pages.documentId, documentId), eq(pages.status, "parsed")));
-      const fiscalYearEndDay = calendar?.text ? findFiscalYearEndDay(calendar.text) : null;
-
-      const corpus = await db
-        .select({
-          documentId: assertions.documentId,
-          subject: assertions.subject,
-          predicate: assertions.predicate,
-          rawValue: assertions.rawValue,
-          unit: assertions.unit,
-        })
-        .from(assertions)
-        .where(
-          and(
-            ne(assertions.documentId, documentId),
-            eq(assertions.pipelineVersion, pipelineVersion),
-          ),
-        );
-
-      // A child invocation may fail after writing one insert chunk. Clearing only these pages makes
-      // its retry idempotent without disturbing sibling batches that already completed.
-      if (parsedPages.length > 0) {
-        await db.delete(assertions).where(
-          and(
-            eq(assertions.documentId, documentId),
-            eq(assertions.pipelineVersion, pipelineVersion),
-            inArray(
-              assertions.pageId,
-              parsedPages.map((page) => page.id),
+    try {
+      return await step.run("extract", async () => {
+        const startedAt = Date.now();
+        const parsedPages = await db
+          .select()
+          .from(pages)
+          .where(
+            and(
+              eq(pages.documentId, documentId),
+              eq(pages.status, "parsed"),
+              inArray(pages.pageNumber, pageNumbers),
             ),
-          ),
+          )
+          .orderBy(asc(pages.pageNumber));
+
+        // Read once per batch, over the whole document rather than these pages. A filing declares its
+        // year end in one place and then writes "FY24" everywhere; without this, every one of those
+        // labels is undatable and the grounding gate refuses it.
+        const [calendar] = await db
+          .select({
+            text: sql<string>`string_agg(${pages.text}, ' ' order by ${pages.pageNumber})`,
+          })
+          .from(pages)
+          .where(and(eq(pages.documentId, documentId), eq(pages.status, "parsed")));
+        const fiscalYearEndDay = calendar?.text ? findFiscalYearEndDay(calendar.text) : null;
+
+        const corpus = await db
+          .select({
+            documentId: assertions.documentId,
+            subject: assertions.subject,
+            predicate: assertions.predicate,
+            rawValue: assertions.rawValue,
+            unit: assertions.unit,
+          })
+          .from(assertions)
+          .where(
+            and(
+              ne(assertions.documentId, documentId),
+              eq(assertions.pipelineVersion, pipelineVersion),
+            ),
+          );
+
+        // A child invocation may fail after writing one insert chunk. Clearing only these pages makes
+        // its retry idempotent without disturbing sibling batches that already completed.
+        if (parsedPages.length > 0) {
+          await db.delete(assertions).where(
+            and(
+              eq(assertions.documentId, documentId),
+              eq(assertions.pipelineVersion, pipelineVersion),
+              inArray(
+                assertions.pageId,
+                parsedPages.map((page) => page.id),
+              ),
+            ),
+          );
+        }
+
+        const result = await extractAssertionCandidates(
+          parsedPages.map((page) => ({
+            documentId,
+            pageNumber: page.pageNumber,
+            lines: page.lines,
+            tables: page.tables,
+          })),
+          extractionModel,
+          { repetitionCorpus: corpus },
         );
-      }
 
-      const result = await extractAssertionCandidates(
-        parsedPages.map((page) => ({
-          documentId,
-          pageNumber: page.pageNumber,
-          lines: page.lines,
-          tables: page.tables,
-        })),
-        extractionModel,
-        { repetitionCorpus: corpus },
-      );
-
-      const pageByLineId = new Map(
-        parsedPages.flatMap((page) => page.lines.map((line) => [line.id, page] as const)),
-      );
-      const rows: NewAssertion[] = [];
-      let published = 0;
-
-      for (const extracted of result.candidates) {
-        const firstLineId = extracted.candidate.evidence.lineIds[0];
-        const page =
-          (firstLineId ? pageByLineId.get(firstLineId) : undefined) ??
-          parsedPages.find((item) => item.pageNumber === extracted.pageNumbers[0]);
-        if (!page) continue;
-        const lineById = new Map(page.lines.map((line) => [line.id, line]));
-        const candidate = extracted.candidate;
-        const grounded = groundCandidate(
-          candidate,
-          { text: page.text, lines: page.lines },
-          { fiscalYearEndDay },
+        const pageByLineId = new Map(
+          parsedPages.flatMap((page) => page.lines.map((line) => [line.id, page] as const)),
         );
-        if (grounded.status === "published") published += 1;
+        const rows: NewAssertion[] = [];
+        let published = 0;
 
-        rows.push({
-          documentId,
-          pageId: page.id,
-          pageNumber: page.pageNumber,
-          subject: candidate.subject,
-          predicate: candidate.predicate,
-          rawValue: candidate.rawValue,
-          canonicalValue: grounded.canonicalValue,
-          canonicalNumber: grounded.canonicalNumber,
-          unit: grounded.unit,
-          valueType: candidate.valueType,
-          normalizationRule: grounded.normalizationRule,
-          periodStart: grounded.period?.start,
-          periodEnd: grounded.period?.end,
-          periodPrecision: grounded.period?.precision,
-          qualifiers: candidate.qualifiers,
-          modality: candidate.modality,
-          attributedTo: candidate.attributedTo,
-          source: candidate.source,
-          tableContext: candidate.tableContext,
-          evidenceQuote: candidate.evidence.quote,
-          evidenceLineIds: candidate.evidence.lineIds,
-          evidenceBbox: unionBbox(
-            candidate.evidence.lineIds.flatMap((id) => {
-              const line = lineById.get(id);
-              return line ? [line.bbox] : [];
-            }),
-          ),
-          verified: grounded.verified,
-          contextComplete: grounded.contextComplete,
-          status: grounded.status,
-          rejectionReason: grounded.rejectionReason,
-          rejectionDetail: grounded.rejectionDetail,
-          confidence: candidate.confidence,
-          salience: extracted.salience,
-          pipelineVersion,
+        for (const extracted of result.candidates) {
+          const firstLineId = extracted.candidate.evidence.lineIds[0];
+          const page =
+            (firstLineId ? pageByLineId.get(firstLineId) : undefined) ??
+            parsedPages.find((item) => item.pageNumber === extracted.pageNumbers[0]);
+          if (!page) continue;
+          const lineById = new Map(page.lines.map((line) => [line.id, line]));
+          const candidate = extracted.candidate;
+          const grounded = groundCandidate(
+            candidate,
+            { text: page.text, lines: page.lines },
+            { fiscalYearEndDay },
+          );
+          if (grounded.status === "published") published += 1;
+
+          rows.push({
+            documentId,
+            pageId: page.id,
+            pageNumber: page.pageNumber,
+            subject: candidate.subject,
+            predicate: candidate.predicate,
+            rawValue: candidate.rawValue,
+            canonicalValue: grounded.canonicalValue,
+            canonicalNumber: grounded.canonicalNumber,
+            unit: grounded.unit,
+            valueType: candidate.valueType,
+            normalizationRule: grounded.normalizationRule,
+            periodStart: grounded.period?.start,
+            periodEnd: grounded.period?.end,
+            periodPrecision: grounded.period?.precision,
+            qualifiers: candidate.qualifiers,
+            modality: candidate.modality,
+            attributedTo: candidate.attributedTo,
+            source: candidate.source,
+            tableContext: candidate.tableContext,
+            evidenceQuote: candidate.evidence.quote,
+            evidenceLineIds: candidate.evidence.lineIds,
+            evidenceBbox: unionBbox(
+              candidate.evidence.lineIds.flatMap((id) => {
+                const line = lineById.get(id);
+                return line ? [line.bbox] : [];
+              }),
+            ),
+            verified: grounded.verified,
+            contextComplete: grounded.contextComplete,
+            status: grounded.status,
+            rejectionReason: grounded.rejectionReason,
+            rejectionDetail: grounded.rejectionDetail,
+            confidence: candidate.confidence,
+            salience: extracted.salience,
+            pipelineVersion,
+          });
+        }
+
+        for (let offset = 0; offset < rows.length; offset += INSERT_CHUNK) {
+          await db.insert(assertions).values(rows.slice(offset, offset + INSERT_CHUNK));
+        }
+
+        const log = useLogger();
+        log.set({
+          job: { id: jobId, documentId, pipelineVersion, stages: ["extract"] },
+          extract: {
+            pages: parsedPages.length,
+            candidates: result.candidates.length,
+            stored: rows.length,
+            published,
+            rejected: rows.length - published,
+          },
+          timing: { stage: "extract", durationMs: Date.now() - startedAt, attempt: attempt + 1 },
         });
-      }
+        log.info(`extracted ${parsedPages.length} page(s): ${pageNumbers.join(", ")}`);
 
-      for (let offset = 0; offset < rows.length; offset += INSERT_CHUNK) {
-        await db.insert(assertions).values(rows.slice(offset, offset + INSERT_CHUNK));
-      }
-
-      const log = useLogger();
-      log.set({
-        job: { id: jobId, documentId, pipelineVersion, stages: ["extract"] },
-        extract: {
+        return {
           pages: parsedPages.length,
           candidates: result.candidates.length,
           stored: rows.length,
           published,
           rejected: rows.length - published,
-        },
-        timing: { stage: "extract", durationMs: Date.now() - startedAt, attempt: attempt + 1 },
+        };
       });
-      log.info(`extracted ${parsedPages.length} page(s): ${pageNumbers.join(", ")}`);
-
-      return {
-        pages: parsedPages.length,
-        candidates: result.candidates.length,
-        stored: rows.length,
-        published,
-        rejected: rows.length - published,
-      };
-    });
+    } catch (error) {
+      if (error instanceof ExtractionIncompleteError && error.permanent) {
+        throw new NonRetriableError(error.message, { cause: error });
+      }
+      throw error;
+    }
   },
 );

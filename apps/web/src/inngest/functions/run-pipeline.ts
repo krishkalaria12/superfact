@@ -1,10 +1,12 @@
 import { assertions, db, documents, edges, JOB_STAGES, jobs, pages } from "@superfact/db";
 import type { JobStage } from "@superfact/db";
 import { and, eq, inArray } from "@superfact/db/orm";
+import { NonRetriableError } from "inngest";
 
 import { planPairBatches } from "@/lib/adjudication/relate";
 import { embeddingModel } from "@/lib/embedding";
 import { useLogger } from "@/lib/evlog";
+import { PermanentModelFailure } from "@/lib/model-errors";
 import { pairDocument } from "@/lib/pairing";
 import { PAGES_PER_EXTRACTION_BATCH, planExtractionBatches } from "@/lib/extract";
 import { planPageBatches } from "@/lib/parse";
@@ -176,11 +178,19 @@ export const runPipeline = inngest.createFunction(
         // this step computes and hands straight to the adjudicators, and phase 07's edges are the
         // durable record of what came of them.
         const pairs = await step.run("stage:relate:pairs", async () => {
-          const run = await pairDocument({
-            documentId: job.documentId,
-            pipelineVersion: job.pipelineVersion,
-            model: embeddingModel,
-          });
+          let run: Awaited<ReturnType<typeof pairDocument>>;
+          try {
+            run = await pairDocument({
+              documentId: job.documentId,
+              pipelineVersion: job.pipelineVersion,
+              model: embeddingModel,
+            });
+          } catch (error) {
+            if (error instanceof PermanentModelFailure) {
+              throw new NonRetriableError(error.message, { cause: error });
+            }
+            throw error;
+          }
 
           const log = useLogger();
           log.set({

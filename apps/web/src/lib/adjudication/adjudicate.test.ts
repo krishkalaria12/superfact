@@ -6,6 +6,7 @@ import type { PublishedAssertion } from "@superfact/db/contracts";
 import { adjudicatePairs, orderPair } from "./adjudicate.ts";
 import { compareAssertions } from "./compare.ts";
 import type { AdjudicationModel, AdjudicationRequest } from "./types.ts";
+import { PermanentModelFailure } from "../model-errors.ts";
 
 let nextId = 1;
 
@@ -272,6 +273,29 @@ test("records a pair whose model call kept failing instead of dropping it", asyn
   const result = await adjudicatePairs([{ source, target }], model, "test");
 
   assert.equal(result.edges.length, 0);
+  assert.equal(result.stats.skipped, 1);
+  assert.equal(result.skipped[0]?.reason, "model_error");
+});
+
+test("does not retry a permanent adjudication rejection", async () => {
+  const source = assertion({ canonicalNumber: 100, canonicalValue: "100", rawValue: "100" });
+  const target = assertion({
+    documentId: "doc-b",
+    canonicalNumber: 120,
+    canonicalValue: "120",
+    rawValue: "120",
+  });
+  let calls = 0;
+  const model: AdjudicationModel = {
+    async generate() {
+      calls += 1;
+      throw new PermanentModelFailure("credits exhausted");
+    },
+  };
+
+  const result = await adjudicatePairs([{ source, target }], model, "test");
+
+  assert.equal(calls, 1);
   assert.equal(result.stats.skipped, 1);
   assert.equal(result.skipped[0]?.reason, "model_error");
 });

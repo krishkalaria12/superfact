@@ -8,11 +8,13 @@ import { batchProseBySection } from "./batches.ts";
 import { EXTRACTION_SYSTEM_PROMPT, prosePrompt, tablePrompt } from "./prompts.ts";
 import { computeSalience } from "./salience.ts";
 import { batchTableInputs } from "./tables.ts";
+import { PermanentModelFailure, StructuredOutputFailure } from "./types.ts";
 import type {
   ExtractedCandidate,
   ExtractionDiagnostic,
   ExtractionPage,
   ExtractionResult,
+  ProseBatch,
   RepetitionCorpusEntry,
   StructuredOutputModel,
   TableExtractionInput,
@@ -66,6 +68,7 @@ type WorkItem = {
   allowedLineIds: Set<string>;
   name: "prose_assertions" | "table_assertions";
   tableCells: TableExtractionInput[] | null;
+  proseBatch: ProseBatch | null;
 };
 
 export type ExtractOptions = {
@@ -112,7 +115,12 @@ function toQualifiers(pairs: readonly { key: string; value: string }[]) {
 }
 
 function diagnostic(id: string, reason: ExtractionDiagnostic["reason"], error: unknown) {
-  return { inputId: id, reason, detail: error instanceof Error ? error.message : String(error) };
+  return {
+    inputId: id,
+    reason,
+    detail: error instanceof Error ? error.message : String(error),
+    ...(error instanceof PermanentModelFailure ? { permanent: true } : {}),
+  };
 }
 
 /**
@@ -127,6 +135,7 @@ export class ExtractionIncompleteError extends Error {
   // Assigned rather than declared as a constructor parameter property: node's type stripping runs
   // the test suite over these modules directly, and it cannot rewrite that syntax.
   readonly result: ExtractionResult;
+  readonly permanent: boolean;
 
   constructor(result: ExtractionResult) {
     const failures = result.diagnostics.filter((item) => item.reason === "model_error");
@@ -135,6 +144,7 @@ export class ExtractionIncompleteError extends Error {
     );
     this.name = "ExtractionIncompleteError";
     this.result = result;
+    this.permanent = failures.some((failure) => failure.permanent);
   }
 }
 
@@ -153,6 +163,7 @@ export async function extractAssertionCandidates(
       allowedLineIds: new Set(batch.pages.flatMap((page) => page.lines.map((line) => line.id))),
       name: "prose_assertions",
       tableCells: null,
+      proseBatch: batch,
     }),
   );
   const tableWork: WorkItem[] = batchTableInputs(pages).map((input) => ({
@@ -163,7 +174,36 @@ export async function extractAssertionCandidates(
     allowedLineIds: new Set(input.cells.flatMap((cell) => cell.lineIds)),
     name: "table_assertions",
     tableCells: input.cells,
+    proseBatch: null,
   }));
+
+  function splitProseBatch(batch: ProseBatch): [ProseBatch, ProseBatch] | null {
+    const lines = batch.pages.flatMap((page) =>
+      page.lines.map((line) => ({ pageNumber: page.pageNumber, line })),
+    );
+    if (lines.length < 2) return null;
+
+    const totalChars = lines.reduce((sum, item) => sum + item.line.text.length + 1, 0);
+    let chars = 0;
+    let splitAt = 1;
+    for (let index = 0; index < lines.length - 1; index++) {
+      chars += lines[index]!.line.text.length + 1;
+      splitAt = index + 1;
+      if (chars >= totalChars / 2) break;
+    }
+
+    const makeHalf = (items: typeof lines, suffix: string): ProseBatch => {
+      const pages: ProseBatch["pages"] = [];
+      for (const item of items) {
+        const page = pages.at(-1);
+        if (page?.pageNumber === item.pageNumber) page.lines.push(item.line);
+        else pages.push({ pageNumber: item.pageNumber, lines: [item.line] });
+      }
+      return { id: `${batch.id}-${suffix}`, sectionTitle: batch.sectionTitle, pages };
+    };
+
+    return [makeHalf(lines.slice(0, splitAt), "a"), makeHalf(lines.slice(splitAt), "b")];
+  }
 
   const candidates: ExtractedCandidate[] = [];
   const diagnostics: ExtractionDiagnostic[] = [];
@@ -173,28 +213,52 @@ export async function extractAssertionCandidates(
   // prose sections and table cells is a hundred round trips, and doing them one at a time was the
   // single biggest thing standing between a page being parsed and its facts being on screen.
   const responses = await mapWithConcurrency(workItems, MODEL_CONCURRENCY, async (item) => {
-    const call = () =>
+    const call = (prompt = item.prompt) =>
       model.generate({
         name: item.name,
         system: EXTRACTION_SYSTEM_PROMPT,
-        prompt: item.prompt,
+        prompt,
         schema: modelCandidateListSchema,
       });
 
-    try {
-      return { output: await call() };
-    } catch {
-      // One more sampling before the batch gives up. A response the provider could not shape into
-      // the schema usually parses on a second attempt, and without this retry one flaky call out of
-      // several hundred fails a hundred-page document that had already extracted five thousand
-      // facts — which is what happened the first time this ran for real.
+    const callTwice = async (prompt: string) => {
+      try {
+        return { output: await call(prompt) } as const;
+      } catch (error) {
+        if (error instanceof PermanentModelFailure) return { error } as const;
+        // One more sampling before splitting or giving up. Structured output failures are often
+        // transient, and this keeps the common recovery to one extra request.
+      }
+
+      try {
+        return { output: await call(prompt) } as const;
+      } catch (error) {
+        return { error } as const;
+      }
+    };
+
+    const response = await callTwice(item.prompt);
+    if (
+      !("error" in response) ||
+      !(response.error instanceof StructuredOutputFailure) ||
+      !item.proseBatch
+    ) {
+      return response;
     }
 
-    try {
-      return { output: await call() };
-    } catch (error) {
-      return { error };
+    const halves = splitProseBatch(item.proseBatch);
+    if (!halves) return response;
+
+    const outputs: unknown[] = [];
+    for (const half of halves) {
+      const halfResponse = await callTwice(prosePrompt(half));
+      if ("error" in halfResponse) return halfResponse;
+      if (!Array.isArray(halfResponse.output)) {
+        return { error: new Error(`split ${half.id} returned a non-array output`) } as const;
+      }
+      outputs.push(...halfResponse.output);
     }
+    return { output: outputs } as const;
   });
 
   for (const [index, work] of workItems.entries()) {
