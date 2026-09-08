@@ -25,6 +25,17 @@ export type DocumentRow = {
   pipelineVersion: string | null;
   createdAt: string;
   facts: { published: number; rejected: number };
+  job: { id: string; stage: JobStage; status: string } | null;
+};
+
+export type DocumentDetailsResponse = {
+  document: Omit<DocumentRow, "facts" | "job">;
+  coverage: Omit<Progress, "job">;
+  failedPages: {
+    page: number;
+    reason: string | null;
+    detail: string | null;
+  }[];
 };
 
 export type Progress = {

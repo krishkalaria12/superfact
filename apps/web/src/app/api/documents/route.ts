@@ -1,9 +1,10 @@
-import { db, documents } from "@superfact/db";
-import { desc } from "@superfact/db/orm";
+import { db, documents, jobs } from "@superfact/db";
+import { and, desc, eq, inArray } from "@superfact/db/orm";
 
 import { intake, MAX_UPLOAD_BYTES } from "@/lib/documents";
 import { createError, useLogger, withEvlog } from "@/lib/evlog";
 import { readDocumentTotals } from "@/lib/export";
+import { PIPELINE_VERSION } from "@/lib/pipeline";
 
 /**
  * The only way a document enters the system.
@@ -74,6 +75,22 @@ export const POST = withEvlog(async (request: Request) => {
 export const GET = withEvlog(async () => {
   const rows = await db.select().from(documents).orderBy(desc(documents.createdAt));
   const totals = await readDocumentTotals(rows.map((row) => row.id));
+  const activeJobs = await db
+    .select({ id: jobs.id, documentId: jobs.documentId, stage: jobs.stage, status: jobs.status })
+    .from(jobs)
+    .where(
+      and(eq(jobs.pipelineVersion, PIPELINE_VERSION), inArray(jobs.status, ["queued", "running"])),
+    )
+    .orderBy(desc(jobs.createdAt));
+  const jobByDocument = new Map<
+    string,
+    { id: string; stage: (typeof activeJobs)[number]["stage"]; status: string }
+  >();
+  for (const job of activeJobs) {
+    if (!jobByDocument.has(job.documentId)) {
+      jobByDocument.set(job.documentId, { id: job.id, stage: job.stage, status: job.status });
+    }
+  }
 
   return Response.json({
     documents: rows.map((row) => ({
@@ -88,6 +105,7 @@ export const GET = withEvlog(async () => {
       pipelineVersion: row.pipelineVersion,
       createdAt: row.createdAt,
       facts: totals.get(row.id) ?? { published: 0, rejected: 0 },
+      job: jobByDocument.get(row.id) ?? null,
     })),
   });
 });

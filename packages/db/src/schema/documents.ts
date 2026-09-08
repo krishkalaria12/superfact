@@ -16,6 +16,7 @@ export const documentFailureReason = pgEnum("document_failure_reason", [
   "scanned_unsupported",
   "parse_failed",
   "extraction_failed",
+  "relation_failed",
 ]);
 
 /**

@@ -70,7 +70,9 @@ export function DocumentList({ refreshKey }: { refreshKey: number }) {
             >
               {row.status === "failed" && row.failureReason
                 ? row.failureReason.replaceAll("_", " ")
-                : row.status}
+                : row.job
+                  ? `${row.job.stage} ${row.job.status}`
+                  : row.status}
             </span>
           </Link>
         </li>

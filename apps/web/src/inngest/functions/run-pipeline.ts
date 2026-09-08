@@ -83,7 +83,12 @@ export const runPipeline = inngest.createFunction(
       // The document carries the failure too. A run that died is not a document that is still
       // pending, and the failures view reads documents rather than jobs.
       if (job) {
-        const failureReason = job.stage === "extract" ? "extraction_failed" : "parse_failed";
+        const failureReason =
+          job.stage === "parse"
+            ? "parse_failed"
+            : job.stage === "extract"
+              ? "extraction_failed"
+              : "relation_failed";
         await db
           .update(documents)
           .set({ status: "failed", failureReason, failureDetail: error.message })

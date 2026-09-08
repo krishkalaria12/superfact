@@ -1,5 +1,5 @@
-import { db, documents } from "@superfact/db";
-import { eq } from "@superfact/db/orm";
+import { db, documents, pages } from "@superfact/db";
+import { and, eq } from "@superfact/db/orm";
 
 import { readCoverage } from "@/lib/documents";
 import { createError, withEvlog } from "@/lib/evlog";
@@ -15,6 +15,16 @@ export const GET = withEvlog(
       throw createError({ status: 404, message: `No document ${documentId}` });
     }
 
+    const failedPages = await db
+      .select({
+        page: pages.pageNumber,
+        reason: pages.failureReason,
+        detail: pages.failureDetail,
+      })
+      .from(pages)
+      .where(and(eq(pages.documentId, documentId), eq(pages.status, "failed")))
+      .orderBy(pages.pageNumber);
+
     return Response.json({
       document: {
         id: document.id,
@@ -29,6 +39,7 @@ export const GET = withEvlog(
         createdAt: document.createdAt,
       },
       coverage: await readCoverage(document.id),
+      failedPages,
     });
   },
 );

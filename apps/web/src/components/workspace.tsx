@@ -11,6 +11,7 @@ import { ProgressRail } from "@/components/progress-rail";
 import {
   type EdgesResponse,
   type EdgeWithSides,
+  type DocumentDetailsResponse,
   type FactsResponse,
   getJson,
   type Progress,
@@ -39,22 +40,25 @@ export function Workspace({ documentId }: { documentId: string }) {
   const [facts, setFacts] = useState<FactsResponse | null>(null);
   const [rejected, setRejected] = useState<FactsResponse | null>(null);
   const [relationships, setRelationships] = useState<EdgesResponse | null>(null);
+  const [details, setDetails] = useState<DocumentDetailsResponse | null>(null);
   const [selected, setSelected] = useState<Selection>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
     async (signal: AbortSignal) => {
-      const [published, refused, edges] = await Promise.all([
+      const [published, refused, edges, documentDetails] = await Promise.all([
         getJson<FactsResponse>(`/api/documents/${documentId}/facts?limit=200`, signal),
         getJson<FactsResponse>(
           `/api/documents/${documentId}/facts?status=rejected&limit=200`,
           signal,
         ),
         getJson<EdgesResponse>(`/api/documents/${documentId}/edges?limit=200`, signal),
+        getJson<DocumentDetailsResponse>(`/api/documents/${documentId}`, signal),
       ]);
       setFacts(published);
       setRejected(refused);
       setRelationships(edges);
+      setDetails(documentDetails);
       setError(null);
       return published.progress;
     },
@@ -90,6 +94,12 @@ export function Workspace({ documentId }: { documentId: string }) {
   );
 
   const counts = relationships?.counts;
+  const structuralFailureCount =
+    (details?.document.failureReason ? 1 : 0) + (details?.failedPages.length ?? 0);
+  const selectView = (next: View) => {
+    setView(next);
+    setSelected(null);
+  };
 
   return (
     <div className="grid min-h-0 gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
@@ -97,14 +107,14 @@ export function Workspace({ documentId }: { documentId: string }) {
         {facts && <ProgressRail progress={facts.progress} />}
 
         <nav className="flex gap-1 border-border border-b pb-2">
-          <ViewTab active={view} label="Facts" onSelect={setView} value="facts">
+          <ViewTab active={view} label="Facts" onSelect={selectView} value="facts">
             {facts?.total ?? 0}
           </ViewTab>
-          <ViewTab active={view} label="Relationships" onSelect={setView} value="relationships">
+          <ViewTab active={view} label="Relationships" onSelect={selectView} value="relationships">
             {relationships?.total ?? 0}
           </ViewTab>
-          <ViewTab active={view} label="Failures" onSelect={setView} value="failures">
-            {rejected?.total ?? 0}
+          <ViewTab active={view} label="Failures" onSelect={selectView} value="failures">
+            {(rejected?.total ?? 0) + structuralFailureCount}
           </ViewTab>
         </nav>
 
@@ -147,11 +157,14 @@ export function Workspace({ documentId }: { documentId: string }) {
             />
           )}
           {view === "failures" && (
-            <FactList
-              facts={rejected?.facts ?? []}
-              onSelect={(value) => setSelected({ kind: "fact", value })}
-              selectedId={selected?.kind === "fact" ? selected.value.id : null}
-            />
+            <div>
+              {details && <StructuralFailures details={details} />}
+              <FactList
+                facts={rejected?.facts ?? []}
+                onSelect={(value) => setSelected({ kind: "fact", value })}
+                selectedId={selected?.kind === "fact" ? selected.value.id : null}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -168,6 +181,38 @@ export function Workspace({ documentId }: { documentId: string }) {
         )}
       </div>
     </div>
+  );
+}
+
+function StructuralFailures({ details }: { details: DocumentDetailsResponse }) {
+  const documentFailure = details.document.failureReason;
+  if (!documentFailure && details.failedPages.length === 0) return null;
+
+  return (
+    <ul>
+      {documentFailure && (
+        <li className="border-border border-b bg-destructive/5 px-3 py-2">
+          <span className="block font-medium text-destructive text-sm">
+            Document {documentFailure.replaceAll("_", " ")}
+          </span>
+          {details.document.failureDetail && (
+            <span className="mt-1 block text-muted-foreground text-xs">
+              {details.document.failureDetail}
+            </span>
+          )}
+        </li>
+      )}
+      {details.failedPages.map((page) => (
+        <li className="border-border border-b bg-destructive/5 px-3 py-2" key={page.page}>
+          <span className="block font-medium text-destructive text-sm">
+            Page {page.page}: {(page.reason ?? "unknown failure").replaceAll("_", " ")}
+          </span>
+          {page.detail && (
+            <span className="mt-1 block text-muted-foreground text-xs">{page.detail}</span>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
