@@ -20,7 +20,7 @@ contradiction is published only if the values genuinely differ _and_ the time, s
 modality, and attribution were all shown to be the same first — and then only if a second model
 pass, told to argue the two are reconcilable, fails to find a qualifier that does it.
 
-## Try it
+## Setup and run instructions
 
 ```bash
 pnpm install
@@ -45,7 +45,9 @@ behaviour is readable without credentials or the source files.
 | `/cases`         | The four assignment cases, selected from output by query      |
 | `/api/export`    | The whole run as JSON, validated against its own contract     |
 
-## How it works
+## Approach
+
+### How it works
 
 Three durable stages per document — parse, extract, relate — each idempotent, each fanned out into
 child function runs so no single request has to carry a long document.
@@ -80,7 +82,7 @@ exists to explain.
 **Adjudicate** compares the pair in code first, then asks a model to interpret what code found. Code
 owns what differs; the model owns what it means and may only fill a gap code could not compare.
 
-## Stack
+### Stack
 
 | Concern | Choice                                                                               |
 | ------- | ------------------------------------------------------------------------------------ |
@@ -96,7 +98,7 @@ owns what differs; the model owns what it means and may only fill a gap code cou
 
 Everything runs in one TypeScript process. No Python service, no OCR, no second parser.
 
-## AI tools used
+### AI tools used
 
 The code was written with Claude Code (Opus) working against `docs/implementation-plan.html`, phase
 by phase, with each phase's exit check run before the next began. The plan itself was drafted and
@@ -109,7 +111,9 @@ at high reasoning effort runs the contradiction second pass. Escalation answers 
 condition — a first pass that said `contradicts` — rather than to a general risk score, which is
 what keeps the expensive call to tens of pairs instead of thousands.
 
-## Limitations
+## Limitations and next steps
+
+### What does not work yet
 
 **There is no measured accuracy, and no claim of any.** The plan cut gold sets, benchmark datasets,
 and evaluation phases deliberately: labelling a corpus well enough for the numbers to mean anything
@@ -142,7 +146,7 @@ resuming a half-finished one is not.
 **Chart-only pages produce nothing.** Vision extraction was cut. A page whose content is a chart the
 parser cannot read contributes no facts and reports as low-density in its page quality.
 
-## Next steps
+### What I would build next
 
 - A page-level pipeline version, so a failed run resumes instead of re-parsing.
 - Measured accuracy over a small hand-labelled slice, which would let the prefilter thresholds and
@@ -152,6 +156,28 @@ parser cannot read contributes no facts and reports as low-density in its page q
 - Better subjects for table facts, by preferring the row header over a generated cell label.
 - Full-text search as a third retrieval path, but only after pairs are visibly being missed.
 - An HNSW index, but only after exact vector search is measurably slow.
+
+## Video demo
+
+Not recorded. The system runs locally from the instructions above, and `samples/` holds real output
+so its behaviour can be read without credentials.
+
+## Additional notes
+
+**Two of the four cases are currently empty, and the page says so.** `/cases` picks each example by
+query over whatever the system produced. Two Delhivery documents from different fiscal years share
+almost no directly comparable figures, so the corpus has produced reconciliations but no
+corroboration or surviving contradiction. Processing the FY24 annual report alongside the FY24
+earnings presentation is what would fill them; that document's run is the one still failing.
+
+**The tuning has one round of evidence behind it, not many.** Every threshold — the similarity
+floor, the pair caps, the rounding tolerance, the prose batch size — was set from reading output
+over the starter PDFs once or twice. They are judgements, not measurements, and the README says so
+in more detail under limitations.
+
+**Read `AGENTS.md` for the reasoning.** It carries the invariants, what was deliberately left out
+and why, and the explanations for the parts of the code that look strange — the column-band split
+in the parser, the tombstone behaviour in storage, why embeddings are written by the relate stage.
 
 ## Layout
 

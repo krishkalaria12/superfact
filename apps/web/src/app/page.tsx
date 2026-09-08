@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { DocumentList } from "@/components/document-list";
@@ -24,12 +25,12 @@ export default function Home() {
       <section className="space-y-3">
         <div className="flex items-baseline justify-between">
           <h2 className="font-medium text-sm">Documents</h2>
-          <a
+          <Link
             className="text-muted-foreground text-xs underline hover:text-foreground"
-            href="/api/export"
+            href="/cases"
           >
-            Export all as JSON
-          </a>
+            See the four cases
+          </Link>
         </div>
         <DocumentList refreshKey={refreshKey} />
       </section>
