@@ -80,9 +80,15 @@ The dimension is fixed in the schema, so changing the model means a migration an
 
 Files live in UploadThing. It assigns its own `{uuid}_{filename}` key and will not take a path, so
 anything a stage may re-upload needs a `customId` derived from content hash and page index —
-otherwise a retry orphans a duplicate instead of overwriting. There is no upsert, so `putObject`
-deletes the `customId` before writing it. Ids are minted in `apps/web/src/lib/storage.ts`; nothing
-constructs one inline. This replaced Vercel Blob after the plan was written; the plan's revision-2
+otherwise a retry orphans a duplicate instead of overwriting. Ids are minted in
+`apps/web/src/lib/storage.ts`; nothing constructs one inline.
+
+**Never delete a stored object to rewrite it.** UploadThing tombstones a deleted `customId`: it
+keeps answering `409 File already exists` while being absent from both `listFiles` and
+`getFileUrls`, so the id can never be written again and nothing can read what used to be there.
+There is no upsert, so `putObject` reuses whatever is already stored under the id — safe, because
+the id is derived from the bytes — and falls back to a suffixed id when it meets a tombstone left
+by something else. `removeObjects` is one-way; treat it as destroying the id, not just the file. This replaced Vercel Blob after the plan was written; the plan's revision-2
 changelog used to list UploadThing as cut.
 
 `apps/web/src/lib/parse` is the parse stage. A MuPDF "line" on a table page is one cell, not one
