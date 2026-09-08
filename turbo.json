@@ -5,6 +5,19 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      // Turbo runs in strict env mode, so a variable the build never declares is stripped before
+      // `next build` sees it. Locally that goes unnoticed, because the env package loads
+      // apps/web/.env through dotenv; on a host that only sets real environment variables, an
+      // undeclared name arrives as undefined and the schema in packages/env rejects the build.
+      "env": [
+        "AI_PROVIDER",
+        "DATABASE_URL",
+        "GOOGLE_GENERATIVE_AI_API_KEY",
+        "INNGEST_EVENT_KEY",
+        "INNGEST_SIGNING_KEY",
+        "OPENAI_API_KEY",
+        "UPLOADTHING_TOKEN"
+      ],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "lint": {
