@@ -58,4 +58,11 @@ export const inngest = new Inngest({
   id: "superfact",
   // The local Inngest dev server needs no keys; cloud mode requires a signing key.
   isDev: env.NODE_ENV !== "production",
+  // Passed rather than left to the SDK, which finds its keys by enumerating `process.env` and
+  // keeping the names it recognises. That enumeration comes back without them once the route is
+  // bundled and deployed, so the handler decided it was in cloud mode with nothing to sign with
+  // and answered every request with a 500. Reading them from the validated env instead keeps the
+  // keys on the same path as every other secret here.
+  eventKey: env.INNGEST_EVENT_KEY,
+  signingKey: env.INNGEST_SIGNING_KEY,
 });
