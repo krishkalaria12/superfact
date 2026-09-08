@@ -33,7 +33,7 @@ export function planPairBatches(pairs: readonly PairReference[]): PairReference[
 }
 
 /** Both sides of every pair in the batch, in the contract shape the prompt is built from. */
-export async function readAdjudicationAssertions(
+async function readAdjudicationAssertions(
   ids: readonly string[],
 ): Promise<Map<string, AdjudicationAssertion>> {
   if (ids.length === 0) return new Map();
@@ -61,7 +61,7 @@ function excluded(column: PgColumn) {
  * its own rows on the way back through. Conflict target is the ordered pair, which is the identity
  * an edge actually has.
  */
-export async function writeEdges(claimEdges: readonly ClaimEdge[]): Promise<number> {
+async function writeEdges(claimEdges: readonly ClaimEdge[]): Promise<number> {
   if (claimEdges.length === 0) return 0;
 
   const rows = claimEdges.map(toEdgeRow);
