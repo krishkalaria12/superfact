@@ -32,8 +32,11 @@ pnpm dev
 `pnpm dev` starts the app on http://localhost:3001 and the Inngest dev server on
 http://localhost:8288. Neither Inngest key is needed locally.
 
-Then drop a PDF on the home page. Facts appear while later pages are still being read. Six starter
-PDFs are in `docs/starter-datasets/`.
+Then drop a PDF on the home page. Facts appear while later pages are still being read.
+
+The six starter PDFs live under `docs/starter-datasets/` locally but are not committed — they are
+not mine to redistribute. `samples/` holds output from a real run over them instead, so the system's
+behaviour is readable without credentials or the source files.
 
 | Where            | What                                                          |
 | ---------------- | ------------------------------------------------------------- |

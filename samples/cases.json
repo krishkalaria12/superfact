@@ -1,0 +1,166 @@
+[
+  {
+    "key": "corroboration",
+    "title": "One value, two documents, different words",
+    "looksFor": "The raw strings differ and the canonical values match. Similarity did not decide this — the deterministic path matched on the normalized number.",
+    "edge": null,
+    "fact": null,
+    "note": "No cross-document equivalent value has been found yet."
+  },
+  {
+    "key": "contradiction",
+    "title": "A contradiction with both spans on the page",
+    "looksFor": "Every decisive field is in the matched list. The values conflict and the time, scope, unit, modality, and attribution were all shown to be the same first.",
+    "edge": null,
+    "fact": null,
+    "note": "No contradiction has survived the review yet."
+  },
+  {
+    "key": "reconciled",
+    "title": "A contradiction a qualifier defused",
+    "looksFor": "The first pass called this a conflict. A second pass, asked to argue the opposite, found the qualifier that lets both be true — and both readings are kept.",
+    "edge": {
+      "id": "60e885a8-db91-401e-9cec-b351f3ffdfec",
+      "sourceAssertionId": "01bf673d-0283-419c-9131-919b2fca34c1",
+      "targetAssertionId": "b05820c5-63bb-48cc-a48e-9382ed6e18f1",
+      "verdict": "reconciles",
+      "reasonCode": "time_supersession",
+      "matchedFields": ["subject", "scope", "unit", "modality", "attribution"],
+      "mismatchedFields": ["predicate", "time", "value"],
+      "explanation": "Both quotes report observed EBITDA margin in percent, but for different, non-overlapping reporting periods: the first is the nine months ended December 31, 2021, while the second is Q4 FY23. The differing values therefore do not conflict.",
+      "confidence": 0.99,
+      "priorPass": null,
+      "pipelineVersion": "0.3.0",
+      "source": {
+        "id": "01bf673d-0283-419c-9131-919b2fca34c1",
+        "documentId": "854ed4e7-7d5f-4643-a834-d5179953ce15",
+        "page": 7,
+        "subject": "EBITDA margin",
+        "predicate": "has value",
+        "rawValue": "0.7%",
+        "canonicalValue": "0.007",
+        "canonicalNumber": 0.007,
+        "unit": "percent",
+        "valueType": "percent",
+        "normalizationRule": "percent_to_ratio",
+        "period": {
+          "start": "2023-01-01",
+          "end": "2023-03-31",
+          "precision": "quarter"
+        },
+        "qualifiers": {
+          "period": "Q4 FY23"
+        },
+        "modality": "observed",
+        "attributedTo": null,
+        "source": "prose",
+        "tableContext": null,
+        "evidence": {
+          "quote": "Q4 FY23: ₹13 Cr / 0.7%",
+          "lineIds": ["p7l19"],
+          "bbox": {
+            "x0": 379.9700012207031,
+            "x1": 498.38812255859375,
+            "y0": 213.2070770263672,
+            "y1": 225.54344177246094
+          }
+        },
+        "confidence": 1,
+        "salience": 0.6,
+        "pipelineVersion": "0.3.0",
+        "status": "published",
+        "verified": true,
+        "contextComplete": true
+      },
+      "target": {
+        "id": "b05820c5-63bb-48cc-a48e-9382ed6e18f1",
+        "documentId": "b31f18a1-5845-48d7-97df-601b1468e91b",
+        "page": 56,
+        "subject": "EBITDA margin",
+        "predicate": "was",
+        "rawValue": "(4.82)%",
+        "canonicalValue": "-0.0482",
+        "canonicalNumber": -0.0482,
+        "unit": "percent",
+        "valueType": "percent",
+        "normalizationRule": "percent_to_ratio",
+        "period": {
+          "start": "2021-12-31",
+          "end": "2021-12-31",
+          "precision": "day"
+        },
+        "qualifiers": {
+          "period": "nine months period ended December 31, 2021"
+        },
+        "modality": "observed",
+        "attributedTo": null,
+        "source": "prose",
+        "tableContext": null,
+        "evidence": {
+          "quote": "while declining to (4.82)% in the nine months period ended December 31, 2021.",
+          "lineIds": ["p56l40"],
+          "bbox": {
+            "x0": 72.02400207519531,
+            "x1": 525.7935180664062,
+            "y0": 534.7955932617188,
+            "y1": 545.8213500976562
+          }
+        },
+        "confidence": 1,
+        "salience": 0.6,
+        "pipelineVersion": "0.3.0",
+        "status": "published",
+        "verified": true,
+        "contextComplete": true
+      }
+    },
+    "fact": null,
+    "note": "The first pass reached this directly, so there is no overturned reading to show. The second pass only runs on a verdict of contradicts, and none survived to reach it."
+  },
+  {
+    "key": "failure",
+    "title": "A real failure, and what the system did instead of guessing",
+    "looksFor": "Nothing was silently dropped. The refusal carries a reason code, and the repair is to fix the cause and re-upload: the content hash makes the re-run cheap.",
+    "edge": null,
+    "fact": {
+      "id": "6dd4678e-59be-467b-bb77-91b6e6378c70",
+      "documentId": "b31f18a1-5845-48d7-97df-601b1468e91b",
+      "page": 1,
+      "subject": "Delhivery Limited offer",
+      "predicate": "fresh issue size",
+      "rawValue": "82,152,503",
+      "canonicalValue": "82152503",
+      "canonicalNumber": 82152503,
+      "unit": "Equity Shares",
+      "valueType": "number",
+      "normalizationRule": "equity shares_identity",
+      "period": null,
+      "qualifiers": {
+        "basis": "Subject to finalization of the Basis of Allotment"
+      },
+      "modality": "observed",
+      "attributedTo": null,
+      "source": "prose",
+      "tableContext": null,
+      "evidence": {
+        "quote": "Fresh issue of 82,152,503* Equity Shares aggregating to ₹40,000.00 million",
+        "lineIds": ["p1l40", "p1l41", "p1l42", "p1l43", "p1l44", "p1l45", "p1l46"],
+        "bbox": {
+          "x0": 98.06400299072266,
+          "x1": 181.67405700683594,
+          "y0": 208.4810028076172,
+          "y1": 248.44400024414062
+        }
+      },
+      "confidence": 1,
+      "salience": 0.6,
+      "pipelineVersion": "0.3.0",
+      "status": "rejected",
+      "verified": false,
+      "contextComplete": true,
+      "rejectionReason": "quote_not_found",
+      "rejectionDetail": "evidence quote does not occur verbatim in the stored page text"
+    },
+    "note": "02-delhivery-annual-report-fy24-excerpt.pdf was refused whole: extraction failed. extraction incomplete: prose-7: No object generated: could not parse the response."
+  }
+]
