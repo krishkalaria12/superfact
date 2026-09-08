@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   findFiscalYearEndDay,
+  findPeriodInSource,
   normalizePeriod,
   normalizeValue,
   verifyValueInSource,
@@ -103,6 +104,19 @@ test("normalizes dates and reporting periods to inclusive bounds", () => {
   assert.deepEqual(period("2023-2024"), {
     start: "2023-01-01",
     end: "2024-12-31",
+    precision: "year",
+  });
+  assert.deepEqual(period("2022-23", "2023-03-31"), {
+    start: "2022-04-01",
+    end: "2023-03-31",
+    precision: "fiscal_year",
+  });
+});
+
+test("reads a bare reporting-year range as a range, not its first calendar year", () => {
+  assert.deepEqual(findPeriodInSource("Results for 2022-23"), {
+    start: "2022-01-01",
+    end: "2023-12-31",
     precision: "year",
   });
 });

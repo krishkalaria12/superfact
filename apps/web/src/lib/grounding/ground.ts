@@ -87,14 +87,14 @@ function candidatePeriod(
     if (PERIOD_KEY.test(normalizedKey)) {
       const normalized = normalizePeriod(value, options);
       if (normalized.ok) return normalized.value;
-      const embedded = findPeriodInSource(value);
+      const embedded = findPeriodInSource(value, options);
       if (embedded) return embedded;
     }
   }
 
   for (const source of [context?.columnHeader, context?.title, candidate.evidence.quote]) {
     if (!source) continue;
-    const period = findPeriodInSource(source);
+    const period = findPeriodInSource(source, options);
     if (period) return period;
   }
   return null;

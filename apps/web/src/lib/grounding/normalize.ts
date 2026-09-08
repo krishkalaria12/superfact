@@ -498,20 +498,24 @@ export function normalizePeriod(
     const year = Number(match[1]);
     const month = Number(match[2]);
     const day = match[3] ? Number(match[3]) : null;
-    if (!validDate(year, month, day ?? 1)) return fail(`invalid date ${JSON.stringify(value)}`);
-    return day
-      ? {
-          ok: true,
-          value: { start: iso(year, month, day), end: iso(year, month, day), precision: "day" },
-        }
-      : {
-          ok: true,
-          value: {
-            start: iso(year, month, 1),
-            end: iso(year, month, lastDay(year, month)),
-            precision: "month",
-          },
-        };
+    if (validDate(year, month, day ?? 1)) {
+      return day
+        ? {
+            ok: true,
+            value: { start: iso(year, month, day), end: iso(year, month, day), precision: "day" },
+          }
+        : {
+            ok: true,
+            value: {
+              start: iso(year, month, 1),
+              end: iso(year, month, lastDay(year, month)),
+              precision: "month",
+            },
+          };
+    }
+    // `2022-23` is a reporting-year range, not an invalid month. Let the range parser below own
+    // two-part values whose second component cannot be a month.
+    if (day || month <= 12) return fail(`invalid date ${JSON.stringify(value)}`);
   }
 
   match =
@@ -551,6 +555,10 @@ export function normalizePeriod(
     const secondRaw = Number(yearRange[2]);
     const second = secondRaw < 100 ? Math.floor(first / 100) * 100 + secondRaw : secondRaw;
     if (second < first) return fail("period range ends before it starts");
+    if (second === first + 1 && (options.fiscalYearEnd || options.fiscalYearEndDay)) {
+      const bounds = fiscalBounds(second);
+      if (bounds) return { ok: true, value: { ...bounds, precision: "fiscal_year" } };
+    }
     return {
       ok: true,
       value: { start: iso(first, 1, 1), end: iso(second, 12, 31), precision: "year" },
@@ -718,7 +726,10 @@ export function verifyValueInSource(input: {
   return { ok: true };
 }
 
-function dateCandidates(source: string): Period[] {
+function dateCandidates(
+  source: string,
+  options: { fiscalYearEnd?: string; fiscalYearEndDay?: FiscalYearEndDay } = {},
+): Period[] {
   const patterns = [
     /\b(?:FY|fiscal\s+year)\s*['’]?\d{2,4}(?:\s*[-/]\s*\d{2,4})?\b/gi,
     /\b(?:Q[1-4]\s*(?:FY)?\s*['’]?\d{2,4}|(?:FY)?\s*['’]?\d{2,4}\s*Q[1-4])\b/gi,
@@ -727,6 +738,7 @@ function dateCandidates(source: string): Period[] {
     /\b\d{1,2}\s+[A-Za-z]+\s+\d{4}\b/g,
     /\b[A-Za-z]+\s+\d{1,2},?\s+\d{4}\b/g,
     /\b[A-Za-z]+\s+\d{4}\b/g,
+    /\b\d{4}\s*[-–—/]\s*(?:\d{2}|\d{4})\b/g,
     /\b\d{4}\b/g,
   ];
   const periods: Period[] = [];
@@ -736,7 +748,7 @@ function dateCandidates(source: string): Period[] {
       const start = match.index;
       const end = start + match[0].length;
       if (occupied.some((span) => start < span.end && end > span.start)) continue;
-      const result = normalizePeriod(match[0]);
+      const result = normalizePeriod(match[0], options);
       if (result.ok) periods.push(result.value);
       if (result.ok) occupied.push({ start, end });
     }
@@ -744,6 +756,9 @@ function dateCandidates(source: string): Period[] {
 }
 
 /** Returns the first explicit date or reporting period in a larger piece of source text. */
-export function findPeriodInSource(source: string): Period | null {
-  return dateCandidates(clean(source))[0] ?? null;
+export function findPeriodInSource(
+  source: string,
+  options: { fiscalYearEnd?: string; fiscalYearEndDay?: FiscalYearEndDay } = {},
+): Period | null {
+  return dateCandidates(clean(source), options)[0] ?? null;
 }
