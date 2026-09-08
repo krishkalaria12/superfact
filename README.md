@@ -123,6 +123,11 @@ cannot stand behind.
 **Scanned PDFs are refused outright.** There is no OCR. A document with no text layer is refused
 whole rather than half-parsed into assertions nothing can ground.
 
+**Table facts inherit poor subjects.** A cell whose row header the parser could not resolve becomes
+an assertion with a subject like "unlabeled row", which is honest about what was read but of little
+use to a reviewer. The context is still attached and the evidence still points at the right cell;
+the naming is what suffers.
+
 **A ragged table emits no rows.** When the geometry does not resolve into a clean grid, the band
 keeps its bounding box and its raster and produces nothing, because wrong numbers under the right
 header are worse than no numbers.
@@ -139,6 +144,7 @@ parser cannot read contributes no facts and reports as low-density in its page q
 - A page-level pipeline version, so a failed run resumes instead of re-parsing.
 - Measured accuracy over a small hand-labelled slice, which would let the prefilter thresholds and
   the similarity floor be tuned against something other than judgement.
+- Better subjects for table facts, by preferring the row header over a generated cell label.
 - Full-text search as a third retrieval path, but only after pairs are visibly being missed.
 - An HNSW index, but only after exact vector search is measurably slow.
 
