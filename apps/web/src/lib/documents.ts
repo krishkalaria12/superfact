@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { db, documents, jobs, pages } from "@superfact/db";
-import type { Document } from "@superfact/db";
+import type { Document, DocumentFailureReason } from "@superfact/db";
 import { and, count, desc, eq, inArray } from "@superfact/db/orm";
 
 import { inngest, jobRunRequested } from "@/inngest/client";
@@ -82,10 +82,24 @@ async function enqueue(documentId: string): Promise<string> {
   return job.id;
 }
 
+/**
+ * Intake refusals, as opposed to runs that failed.
+ *
+ * The distinction matters on re-upload. These four were decided from the bytes, and the bytes have
+ * not changed, so re-uploading gets the same answer without doing any work. `parse_failed` and
+ * `extraction_failed` are not in this list: those say a run broke, which a later run — after a
+ * fix, or simply on a retry — may well not.
+ */
+const INTAKE_REFUSALS = new Set<DocumentFailureReason>([
+  "not_a_pdf",
+  "encrypted",
+  "corrupted",
+  "scanned_unsupported",
+]);
+
 /** What to do with a document the system has seen before. Reached by upload and by upload races. */
 async function resolveExisting(document: Document): Promise<IntakeResult> {
-  if (document.status === "failed") {
-    // The refusal was decided from the bytes, and the bytes have not changed.
+  if (document.failureReason && INTAKE_REFUSALS.has(document.failureReason)) {
     return { outcome: "refused", document, jobId: null };
   }
   if (isReusable(document)) {
