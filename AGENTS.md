@@ -130,7 +130,7 @@ statement each and their results are unioned: the **deterministic** path self-jo
 equal canonical value, which is exact because phase 05 already converted the scales; the
 **semantic** path is a `cross join lateral` top-k over pgvector, exact search with no HNSW index.
 Both hand back nothing but ids. Everything that decides what a match _means_ — predicate
-relatedness, value-type compatibility, unit comparability, the cap — lives in `buildCandidatePairs`,
+relatedness, value-type compatibility, and unit comparability lives in `buildCandidatePairs`,
 which is pure and unit-tested, because "known pairs never reach the adjudicator" is this phase's
 named risk and it is not a thing you can eyeball in a query plan.
 
@@ -141,23 +141,20 @@ Three rules there are load-bearing:
   incompatible value types and on predicates too unrelated to be discussing the same thing, and
   nothing else.
 - **A value match outranks every semantic neighbour.** Scores are banded so the deterministic floor
-  sits above the semantic ceiling, which means the cap can never cut an exact canonical match to
-  make room for a close-sounding one.
+  sits above the semantic ceiling. Ranking controls inspection order only; it never removes a pair.
 - **Pairs are cross-document only.** A document restating its own number costs the same
   adjudication budget and reconciles nothing. Each run pairs one document against everything else
   stored, so a cross-document pair is discovered once, by whichever document arrived second.
 
-Pairing is bounded twice. `DEFAULT_MAX_PAIRS_PER_ASSERTION` stops one fact fanning out;
-`DEFAULT_MAX_PAIRS` stops a run. A hundred-page filing publishes well over a thousand facts, and
-twelve pairs each is more model calls than any budget survives, so a run keeps the best-scoring
-pairs and records the rest as `run_cap` exclusions. Both counts land in the stage's wide event: a
-run that keeps hitting either is a run whose adjudication is incomplete, and that has to be visible
-rather than inferred from a quiet result.
+Pairing has no per-assertion or per-run capacity cap. Relevance checks still reject incompatible
+value types and unrelated claims, and semantic retrieval remains top-k, but every pair that survives
+those evidence-oriented filters reaches the adjudicator. `capped` stays in the event and API shape
+as a compatibility field and is always zero.
 
 Pairs are never stored. They are an intermediate the `stage:relate:pairs` step computes and hands
 straight to the adjudicators, so the stage logs its counts and `GET /api/documents/:id/pairs`
-recomputes them on demand — two queries, no model call. Read `capped` and `dropped` in the log
-before trusting a quiet run: a cap that keeps firing is starving the adjudicator.
+recomputes them on demand — two queries, no model call. Read `dropped` with the exclusion reasons
+before trusting a quiet run; these are relevance failures, not capacity cuts.
 
 `apps/web/src/lib/adjudication` is the second half of `relate`. `compare.ts` is pure and runs first:
 it decides what actually differs between two assertions across subject, predicate, time, scope,

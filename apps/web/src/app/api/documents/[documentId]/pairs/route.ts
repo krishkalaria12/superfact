@@ -61,7 +61,7 @@ export const GET = withEvlog(
       },
       stats: run.stats,
       embeddings: { written: run.embedded, missing: run.missingEmbeddings },
-      // The deterministic join stopped at its row ceiling, so the pair list is a prefix.
+      // Retained for clients built against earlier versions. Retrieval no longer truncates.
       truncated: run.truncated,
       pairs: shown.map((pair) => ({
         key: pair.key,

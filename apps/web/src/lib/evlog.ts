@@ -41,9 +41,8 @@ export type SuperfactFields = {
   /**
    * Retrieval coverage from the pairing stage.
    *
-   * `capped` and `dropped` are here because the phase's named risk is a pair that never reaches
-   * the adjudicator. A run that keeps capping is starving phase 07, and the only way that is
-   * visible without re-running the stage is if the counts travel with the event.
+   * `capped` remains a compatibility field and is always zero. `dropped` counts relevance and
+   * validity exclusions, which stay visible without re-running the stage.
    */
   pairing: {
     focus: number;

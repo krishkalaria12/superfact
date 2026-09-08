@@ -51,8 +51,8 @@ export type CandidatePair = {
 /**
  * Why a proposed pair did not reach the adjudicator.
  *
- * `cap` is the one that matters most: a cap that keeps firing means the adjudicator is being
- * starved of pairs, which is the phase's named risk, and it is only visible if it is recorded.
+ * These are relevance or validity failures, never capacity cuts. Every pair that survives these
+ * checks reaches adjudication.
  */
 export type PairingExclusionReason =
   | "same_document"
@@ -60,9 +60,8 @@ export type PairingExclusionReason =
   | "value_type"
   | "value_mismatch"
   | "predicate"
-  | "similarity_floor"
-  | "cap"
-  | "run_cap";
+  | "claim_relation"
+  | "similarity_floor";
 
 /** One reason, aggregated per assertion, so a run's exclusions stay a summary rather than a dump. */
 export type PairingExclusion = {
@@ -91,8 +90,6 @@ export type PairingResult = {
 };
 
 export type PairingOptions = {
-  maxPairsPerAssertion?: number;
-  maxPairs?: number;
   minSemanticSimilarity?: number;
   minPredicateRelation?: number;
 };

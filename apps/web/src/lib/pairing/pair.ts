@@ -14,39 +14,23 @@ import { canonicalValuesEqual, unitsComparable, valueTypesCompatible } from "./v
 /** How many neighbours the semantic path asks pgvector for, per assertion. */
 export const DEFAULT_TOP_K = 20;
 
-/**
- * How many pairs one assertion may send to the adjudicator.
- *
- * A thousand assertions at top-20 is tens of thousands of pairs, which is not a volume any model
- * budget survives. The cap is what makes the phase tractable, and every pair it cuts is recorded
- * rather than dropped quietly.
- */
-export const DEFAULT_MAX_PAIRS_PER_ASSERTION = 12;
-
-/**
- * How many pairs one run may send to the adjudicator in total.
- *
- * The per-assertion cap bounds any one fact's fan-out; this bounds the run. A hundred-page filing
- * yields well over a thousand published facts, and twelve pairs each is more model calls than any
- * budget survives — so the run takes the best-scoring pairs and records the rest as `run_cap`
- * exclusions. A run that keeps hitting this is a run whose adjudication is incomplete, and the
- * count is in the stage's wide event for exactly that reason.
- */
-export const DEFAULT_MAX_PAIRS = 400;
-
 /** Below this cosine similarity a vector neighbour is noise rather than the same claim reworded. */
 export const DEFAULT_MIN_SEMANTIC_SIMILARITY = 0.5;
 
 /** Predicate affinity a value match needs before it counts as more than a numeric coincidence. */
 export const DEFAULT_MIN_PREDICATE_RELATION = 0.5;
 
+/** A semantic neighbour with no useful lexical anchor must clear this stronger vector threshold. */
+export const DEFAULT_STRONG_SEMANTIC_SIMILARITY = 0.72;
+
 /**
- * A value match beats every semantic-only pair for a cap slot, by construction: the deterministic
- * band starts at 0.75 and the semantic band tops out below it. The phase's named risk is a known
- * pair never reaching the adjudicator, and an exact canonical match is the most known a pair gets.
+ * Deterministic matches rank above semantic-only pairs so inspection remains stable and the most
+ * concrete relationships appear first. Ranking affects order only; every surviving pair proceeds.
  */
 const DETERMINISTIC_FLOOR = 0.75;
 const SEMANTIC_CEILING = 0.7;
+const GENERIC_PREDICATE =
+  /^(?:has|have|had|is|are|was|were|includes?|contains?|lists?|shows?|uses?|provides?|represents?|label|value)$/i;
 
 function pairKey(left: string, right: string): string {
   return left < right ? `${left}:${right}` : `${right}:${left}`;
@@ -77,12 +61,6 @@ class ExclusionLog {
     return [...this.entries.values()].reduce((sum, entry) => sum + entry.count, 0);
   }
 
-  countOf(reason: PairingExclusionReason): number {
-    return [...this.entries.values()]
-      .filter((entry) => entry.reason === reason)
-      .reduce((sum, entry) => sum + entry.count, 0);
-  }
-
   toArray(): PairingExclusion[] {
     return [...this.entries.values()].sort(
       (a, b) => b.bestScore - a.bestScore || b.count - a.count,
@@ -107,8 +85,6 @@ export function buildCandidatePairs(input: {
   retrieved: readonly RetrievedPair[];
   options?: PairingOptions;
 }): PairingResult {
-  const maxPerAssertion = input.options?.maxPairsPerAssertion ?? DEFAULT_MAX_PAIRS_PER_ASSERTION;
-  const maxPairs = input.options?.maxPairs ?? DEFAULT_MAX_PAIRS;
   const minSimilarity = input.options?.minSemanticSimilarity ?? DEFAULT_MIN_SEMANTIC_SIMILARITY;
   const minRelation = input.options?.minPredicateRelation ?? DEFAULT_MIN_PREDICATE_RELATION;
 
@@ -182,6 +158,25 @@ export function buildCandidatePairs(input: {
       continue;
     }
 
+    // Weak vector similarity between generic phrases is the main source of cross-domain noise.
+    // Keep lexical paraphrases at the normal floor, and keep genuinely strong vector matches even
+    // when they share no words. A merely nearby embedding must have an anchor in either the subject
+    // or predicate before it consumes an adjudication call.
+    const genericPredicate =
+      GENERIC_PREDICATE.test(source.predicate.trim()) ||
+      GENERIC_PREDICATE.test(target.predicate.trim());
+    const hasClaimAnchor =
+      subjectRelation >= 0.25 || (!genericPredicate && predicateRelation >= minRelation);
+    if (
+      semanticSupport &&
+      !deterministicSupport &&
+      !hasClaimAnchor &&
+      (similarity ?? 0) < DEFAULT_STRONG_SEMANTIC_SIMILARITY
+    ) {
+      excluded.record(source.id, "claim_relation", score);
+      continue;
+    }
+
     // An exact value match between unrelated predicates is arithmetic, not agreement. The semantic
     // path can still rescue the pair on its own evidence.
     if (deterministicSupport && !semanticSupport && predicateRelation < minRelation) {
@@ -210,20 +205,8 @@ export function buildCandidatePairs(input: {
     else kept.set(source.id, [candidate]);
   }
 
-  const survivors: CandidatePair[] = [];
-  for (const [assertionId, bucket] of kept) {
-    bucket.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
-    for (const cut of bucket.slice(maxPerAssertion)) {
-      excluded.record(assertionId, "cap", cut.score);
-    }
-    survivors.push(...bucket.slice(0, maxPerAssertion));
-  }
-  survivors.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
-
-  const pairs = survivors.slice(0, maxPairs);
-  for (const cut of survivors.slice(maxPairs)) {
-    excluded.record(cut.sourceAssertionId, "run_cap", cut.score);
-  }
+  const pairs = [...kept.values()].flat();
+  pairs.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
 
   return {
     pairs,
@@ -235,8 +218,8 @@ export function buildCandidatePairs(input: {
       deterministic: pairs.filter((pair) => pair.paths.includes("deterministic")).length,
       semantic: pairs.filter((pair) => pair.paths.includes("semantic")).length,
       pairs: pairs.length,
-      capped: excluded.countOf("cap") + excluded.countOf("run_cap"),
-      dropped: excluded.total - excluded.countOf("cap") - excluded.countOf("run_cap"),
+      capped: 0,
+      dropped: excluded.total,
     },
   };
 }

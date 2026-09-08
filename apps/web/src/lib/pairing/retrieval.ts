@@ -14,12 +14,6 @@ import type { PairingAssertion, RetrievedPair } from "./types.ts";
  * already good at.
  */
 
-/**
- * A ceiling on the deterministic join, so a value that a corpus repeats hundreds of times cannot
- * turn one query into a cartesian product. Hitting it is reported, never silently truncated.
- */
-export const DETERMINISTIC_ROW_LIMIT = 20_000;
-
 /** Rows per embedding write. One statement per chunk rather than one per assertion. */
 const EMBED_UPDATE_CHUNK = 100;
 
@@ -144,7 +138,6 @@ export async function writeAssertionEmbeddings(
 export async function retrieveDeterministic(
   documentId: string,
   pipelineVersion: string,
-  limit: number = DETERMINISTIC_ROW_LIMIT,
 ): Promise<{ pairs: RetrievedPair[]; truncated: boolean }> {
   const result = await db.execute<{ source_id: string; target_id: string }>(sql`
     select ${focus.id} as source_id, ${corpus.id} as target_id
@@ -171,7 +164,6 @@ export async function retrieveDeterministic(
       and ${focus.status} = 'published'
       and ${focus.pipelineVersion} = ${pipelineVersion}
     order by ${focus.id}, ${corpus.id}
-    limit ${limit}
   `);
 
   return {
@@ -181,7 +173,7 @@ export async function retrieveDeterministic(
       path: "deterministic" as const,
       similarity: null,
     })),
-    truncated: result.rows.length >= limit,
+    truncated: false,
   };
 }
 

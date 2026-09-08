@@ -181,7 +181,7 @@ corroboration or surviving contradiction. Processing the FY24 annual report alon
 earnings presentation is what would fill them; that document's run is the one still failing.
 
 **The tuning has one round of evidence behind it, not many.** Every threshold — the similarity
-floor, the pair caps, the rounding tolerance, the prose batch size — was set from reading output
+floor, the rounding tolerance, the prose batch size — was set from reading output
 over the starter PDFs once or twice. They are judgements, not measurements, and the README says so
 in more detail under limitations.
 

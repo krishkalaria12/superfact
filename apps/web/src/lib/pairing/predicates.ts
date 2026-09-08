@@ -34,6 +34,7 @@ const STOPWORDS = new Set([
   "our",
   "this",
   "that",
+  "following",
 ]);
 
 /** Enough stemming to join a plural to its singular, and nothing clever enough to be wrong. */

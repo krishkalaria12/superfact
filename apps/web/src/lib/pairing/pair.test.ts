@@ -182,7 +182,7 @@ test("never pairs a document with itself", () => {
   assert.equal(result.excluded[0]?.reason, "same_document");
 });
 
-test("holds a value match ahead of every semantic neighbour when the cap bites", () => {
+test("ranks a value match ahead of every semantic neighbour without dropping any", () => {
   const focus = assertion({ id: "focus" });
   const exact = assertion({
     id: "exact",
@@ -206,14 +206,11 @@ test("holds a value match ahead of every semantic neighbour when the cap bites",
       ...neighbours.map((item) => pair("focus", item.id, "semantic", 0.99)),
       pair("focus", "exact", "deterministic"),
     ],
-    options: { maxPairsPerAssertion: 2 },
   });
 
-  assert.equal(result.pairs.length, 2);
+  assert.equal(result.pairs.length, 6);
   assert.equal(result.pairs[0]?.targetAssertionId, "exact");
-  const cap = result.excluded.find((entry) => entry.reason === "cap");
-  assert.equal(cap?.count, 4);
-  assert.ok(cap && cap.bestScore > 0, "the cap records what it cut");
+  assert.deepEqual(result.excluded, []);
 });
 
 test("drops vector neighbours below the similarity floor", () => {
@@ -225,6 +222,94 @@ test("drops vector neighbours below the similarity floor", () => {
 
   assert.equal(result.pairs.length, 0);
   assert.equal(result.excluded[0]?.reason, "similarity_floor");
+});
+
+test("drops weak cross-domain neighbours that only share generic language", () => {
+  const landCover = assertion({
+    id: "a",
+    subject: "Land cover class 52",
+    predicate: "has label",
+    valueType: "text",
+    unit: null,
+    canonicalValue: "Shrub/scrub",
+    canonicalNumber: null,
+  });
+  const filingTable = assertion({
+    id: "b",
+    documentId: "doc-b",
+    subject: "Particulars",
+    predicate: "unit label",
+    valueType: "text",
+    unit: null,
+    canonicalValue: "in rupees",
+    canonicalNumber: null,
+  });
+
+  const result = buildCandidatePairs({
+    focus: [landCover],
+    corpus: [filingTable],
+    retrieved: [pair("a", "b", "semantic", 0.54)],
+  });
+
+  assert.equal(result.pairs.length, 0);
+  assert.equal(result.excluded[0]?.reason, "claim_relation");
+});
+
+test("does not treat the generic predicate includes as a claim anchor", () => {
+  const landCover = assertion({
+    id: "a",
+    subject: "Annual NLCD",
+    predicate: "includes",
+    valueType: "text",
+    unit: null,
+    canonicalValue: "Spectral Change Day of Year",
+    canonicalNumber: null,
+  });
+  const foodCategory = assertion({
+    id: "b",
+    documentId: "doc-b",
+    subject: "Others",
+    predicate: "includes",
+    valueType: "text",
+    unit: null,
+    canonicalValue: "prepared meals",
+    canonicalNumber: null,
+  });
+
+  const result = buildCandidatePairs({
+    focus: [landCover],
+    corpus: [foodCategory],
+    retrieved: [pair("a", "b", "semantic", 0.56)],
+  });
+
+  assert.equal(result.pairs.length, 0);
+  assert.equal(result.excluded[0]?.reason, "claim_relation");
+});
+
+test("keeps a strong semantic paraphrase without shared words", () => {
+  const sales = assertion({
+    id: "a",
+    subject: "Sales",
+    predicate: "climbed",
+    canonicalValue: "100",
+    canonicalNumber: 100,
+  });
+  const revenue = assertion({
+    id: "b",
+    documentId: "doc-b",
+    subject: "Revenue",
+    predicate: "increased",
+    canonicalValue: "110",
+    canonicalNumber: 110,
+  });
+
+  const result = buildCandidatePairs({
+    focus: [sales],
+    corpus: [revenue],
+    retrieved: [pair("a", "b", "semantic", 0.83)],
+  });
+
+  assert.equal(result.pairs.length, 1);
 });
 
 test("reads a containment relation as one predicate", () => {
@@ -257,7 +342,7 @@ test("compares canonical values and units without guessing", () => {
   );
 });
 
-test("bounds a whole run, keeping the best-scoring pairs and recording the rest", () => {
+test("sends every relevant pair to adjudication without a capacity cap", () => {
   const focus = Array.from({ length: 6 }, (_, index) => assertion({ id: `f${index}` }));
   const corpus = Array.from({ length: 6 }, (_, index) =>
     assertion({ id: `t${index}`, documentId: "doc-b" }),
@@ -269,16 +354,10 @@ test("bounds a whole run, keeping the best-scoring pairs and recording the rest"
     retrieved: focus.flatMap((source) =>
       corpus.map((target) => pair(source.id, target.id, "deterministic")),
     ),
-    options: { maxPairs: 5 },
   });
 
-  assert.equal(result.pairs.length, 5);
-  assert.equal(result.stats.pairs, 5);
-  const runCap = result.excluded.filter((entry) => entry.reason === "run_cap");
-  assert.ok(runCap.length > 0, "what the run cap cut is recorded, not dropped quietly");
-  assert.equal(
-    runCap.reduce((total, entry) => total + entry.count, 0) + 5,
-    36,
-    "every proposed pair is either kept or accounted for",
-  );
+  assert.equal(result.pairs.length, 36);
+  assert.equal(result.stats.pairs, 36);
+  assert.equal(result.stats.capped, 0);
+  assert.deepEqual(result.excluded, []);
 });

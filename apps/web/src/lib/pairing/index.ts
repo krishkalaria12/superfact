@@ -1,7 +1,5 @@
 export {
   buildCandidatePairs,
-  DEFAULT_MAX_PAIRS,
-  DEFAULT_MAX_PAIRS_PER_ASSERTION,
   DEFAULT_MIN_PREDICATE_RELATION,
   DEFAULT_MIN_SEMANTIC_SIMILARITY,
   DEFAULT_TOP_K,
@@ -9,7 +7,6 @@ export {
 export { pairDocument, type PairingRun } from "./pair-document.ts";
 export { tokenAffinity } from "./predicates.ts";
 export {
-  DETERMINISTIC_ROW_LIMIT,
   readAssertionsById,
   readAssertionsMissingEmbedding,
   readFocusAssertions,

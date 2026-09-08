@@ -17,7 +17,7 @@ export type PairingRun = PairingResult & {
   embedded: number;
   /** Published assertions still without a vector, and so invisible to the semantic path. */
   missingEmbeddings: number;
-  /** The deterministic join hit its row ceiling, so its result is a prefix rather than the whole. */
+  /** Compatibility flag retained for API consumers. Deterministic retrieval is no longer capped. */
   truncated: boolean;
 };
 
