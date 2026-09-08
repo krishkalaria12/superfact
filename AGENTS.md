@@ -233,9 +233,16 @@ provider sees at once; raising any of them raises that product.
 `db:push` creates the pgvector extension first, because drizzle-kit does not manage extensions and
 `assertions.embedding` is `vector(1536)`.
 
-`docs/starter-datasets/` holds the six starter PDFs, 511 pages. They are the tuning surface: the
-plan has no gold set, so parser and prompt changes are judged by re-reading output over the same
-fixed pages.
+`docs/starter-datasets/` holds the six starter PDFs, 511 pages, gitignored because they are not ours
+to redistribute. They are the tuning surface: the plan has no gold set, so parser and prompt changes
+are judged by re-reading output over the same fixed pages.
+
+Run the pipeline over real documents before believing a stage works. Every serious defect so far was
+found that way and none by reading code: structured output rejecting a Zod `.default()`, one
+malformed table cell failing a whole batch, a 25-page extraction batch running for 25 minutes
+serially, half of a document's candidates refused because its fiscal year end was stated on another
+page, a document whose run failed being permanently unre-uploadable, and a rounded restatement of
+one figure having no way to read as agreement. Unit tests caught none of them.
 
 Work is never repeated. `POST /api/documents` hashes first, so a file already processed at the
 current pipeline version comes back `reused` after one index lookup — no parse, no extraction, no
