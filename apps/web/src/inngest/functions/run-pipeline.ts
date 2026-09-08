@@ -6,8 +6,8 @@ import { planPairBatches } from "@/lib/adjudication/relate";
 import { embeddingModel } from "@/lib/embedding";
 import { useLogger } from "@/lib/evlog";
 import { pairDocument } from "@/lib/pairing";
-import { planExtractionBatches } from "@/lib/extract";
-import { planPageBatches, PAGES_PER_BATCH } from "@/lib/parse";
+import { PAGES_PER_EXTRACTION_BATCH, planExtractionBatches } from "@/lib/extract";
+import { planPageBatches } from "@/lib/parse";
 import { inngest, jobRunRequested } from "../client";
 import { adjudicatePairBatchFunction } from "./adjudicate-pair-batch";
 import { extractPageBatch } from "./extract-page-batch";
@@ -153,7 +153,7 @@ export const runPipeline = inngest.createFunction(
             .from(pages)
             .where(and(eq(pages.documentId, job.documentId), eq(pages.status, "parsed")));
 
-          const planned = planExtractionBatches(parsed, PAGES_PER_BATCH);
+          const planned = planExtractionBatches(parsed, PAGES_PER_EXTRACTION_BATCH);
           log.info(`extract planned ${parsed.length} parsed pages in ${planned.length} batch(es)`);
           return { parse: [], extract: planned };
         }

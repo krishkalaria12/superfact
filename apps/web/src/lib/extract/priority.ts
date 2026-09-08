@@ -27,6 +27,19 @@ const SUMMARY_HEADING =
 /** Above this multiple of the page's body type, a line is a heading rather than a sentence. */
 const HEADING_SIZE_RATIO = 1.12;
 
+/**
+ * Pages per extraction batch.
+ *
+ * Far smaller than the parse batch, and for a different reason. Parsing costs about a second a
+ * page, so twenty-five pages is a comfortable request. Extraction costs one model call per prose
+ * section and per table on the page, so twenty-five pages is dozens of calls and does not fit in a
+ * request at all — the first attempt at this ran a single batch for twenty-five minutes.
+ *
+ * Small batches also get facts on screen sooner, which is the other half of the point: more child
+ * runs, each finishing quickly, means the ranked pages start landing while the rest is still going.
+ */
+export const PAGES_PER_EXTRACTION_BATCH = 4;
+
 export type PagePriorityInput = {
   pageNumber: number;
   lines: readonly Pick<ParsedLine, "text" | "size">[];

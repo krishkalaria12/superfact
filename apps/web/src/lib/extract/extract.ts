@@ -2,6 +2,8 @@ import { assertionCandidateSchema } from "@superfact/db/contracts";
 import type { AssertionCandidate } from "@superfact/db/contracts";
 import { z } from "zod";
 
+import { mapWithConcurrency } from "@/lib/concurrency";
+
 import { batchProseBySection } from "./batches";
 import { EXTRACTION_SYSTEM_PROMPT, prosePrompt, tablePrompt } from "./prompts";
 import { computeSalience } from "./salience";
@@ -47,6 +49,14 @@ const modelCandidateSchema = assertionCandidateSchema
       }),
   });
 const modelCandidateListSchema = z.array(modelCandidateSchema);
+
+/**
+ * Model calls in flight at once, per batch.
+ *
+ * Multiplied by the concurrency limit on `extract-page-batch`, this is what the model provider's
+ * rate limit actually sees. Raising either raises that product.
+ */
+const MODEL_CONCURRENCY = 6;
 
 type WorkItem = {
   id: string;
@@ -109,22 +119,34 @@ export async function extractAssertionCandidates(
 
   const candidates: ExtractedCandidate[] = [];
   const diagnostics: ExtractionDiagnostic[] = [];
+  const workItems = [...proseWork, ...tableWork];
 
-  for (const work of [...proseWork, ...tableWork]) {
-    let output: unknown;
+  // The calls go out together; what comes back is still processed in order. A batch of a hundred
+  // prose sections and table cells is a hundred round trips, and doing them one at a time was the
+  // single biggest thing standing between a page being parsed and its facts being on screen.
+  const responses = await mapWithConcurrency(workItems, MODEL_CONCURRENCY, async (item) => {
     try {
-      output = await model.generate({
-        name: work.name,
-        system: EXTRACTION_SYSTEM_PROMPT,
-        prompt: work.prompt,
-        schema: modelCandidateListSchema,
-      });
+      return {
+        output: await model.generate({
+          name: item.name,
+          system: EXTRACTION_SYSTEM_PROMPT,
+          prompt: item.prompt,
+          schema: modelCandidateListSchema,
+        }),
+      };
     } catch (error) {
-      diagnostics.push(diagnostic(work.id, "model_error", error));
+      return { error };
+    }
+  });
+
+  for (const [index, work] of workItems.entries()) {
+    const response = responses[index]!;
+    if ("error" in response) {
+      diagnostics.push(diagnostic(work.id, "model_error", response.error));
       continue;
     }
 
-    const parsed = modelCandidateListSchema.safeParse(output);
+    const parsed = modelCandidateListSchema.safeParse(response.output);
     if (!parsed.success) {
       diagnostics.push(diagnostic(work.id, "invalid_output", z.prettifyError(parsed.error)));
       continue;
