@@ -1,7 +1,7 @@
 import { db, documents, pages } from "@superfact/db";
 import type { Document, NewPage, PageFailureReason } from "@superfact/db";
 import type { ParsedPage } from "@superfact/db/contracts";
-import { eq } from "@superfact/db/orm";
+import { and, eq, gte, lt } from "@superfact/db/orm";
 import * as mupdf from "mupdf";
 
 import { pageRasterObjectId, putObject } from "@/lib/storage";
@@ -147,6 +147,19 @@ export async function parsePageRange(
       (i) => i + from,
     );
     const rows: NewPage[] = [];
+
+    // A child invocation can fail after inserting this range but before Inngest checkpoints the
+    // result. Its retry must replace only its own pages, leaving successful sibling ranges alone.
+    // The parent also clears the stage once, but that step is not replayed for a child retry.
+    await db
+      .delete(pages)
+      .where(
+        and(
+          eq(pages.documentId, document.id),
+          gte(pages.pageNumber, from + 1),
+          lt(pages.pageNumber, Math.min(to, pageCount) + 1),
+        ),
+      );
 
     for (const indices of chunked(range, CHUNK)) {
       const rendered = indices.map((index) => readOnePage(opened, index));
