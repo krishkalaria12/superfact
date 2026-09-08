@@ -1,11 +1,20 @@
 "use client";
 
+import { Skeleton } from "@superfact/ui/components/skeleton";
+import { cn } from "@superfact/ui/lib/utils";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { Cite } from "@/components/vocabulary";
 import { type DocumentRow, getJson } from "@/lib/api";
 
-/** Every document the system has seen, with how far each got. Polls while anything is still running. */
+/**
+ * Every document the system has seen, as a ledger rather than a wall of cards.
+ *
+ * A reader scanning this wants to compare counts down a column, so the counts are monospaced and
+ * right-aligned and the rows are the same height. A document still being read shows what it is
+ * doing in place of its counts, and the list keeps polling until nothing is moving.
+ */
 export function DocumentList({ refreshKey }: { refreshKey: number }) {
   const [rows, setRows] = useState<DocumentRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +33,6 @@ export function DocumentList({ refreshKey }: { refreshKey: number }) {
     const tick = async () => {
       try {
         const documents = await load(controller.signal);
-        // Keep polling only while something has not settled into ready or failed.
         if (documents.some((row) => row.status === "pending" || row.status === "parsing")) {
           timer = setTimeout(tick, 2500);
         }
@@ -41,42 +49,93 @@ export function DocumentList({ refreshKey }: { refreshKey: number }) {
     };
   }, [load, refreshKey]);
 
-  if (error) return <p className="text-destructive text-sm">{error}</p>;
-  if (!rows) return <div className="h-24 animate-pulse bg-muted" />;
+  if (error) {
+    return (
+      <p className="border border-destructive/30 bg-destructive/5 p-3 text-destructive text-sm">
+        {error}
+      </p>
+    );
+  }
+
+  if (!rows) {
+    return (
+      <div className="border border-border">
+        {Array.from({ length: 3 }, (_, index) => (
+          <div
+            className="flex justify-between gap-4 border-border border-b p-3 last:border-b-0"
+            key={index}
+          >
+            <Skeleton className="h-4 w-64" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   if (rows.length === 0) {
-    return <p className="text-muted-foreground text-sm">No documents yet.</p>;
+    return (
+      <div className="border border-border border-dashed p-8 text-center">
+        <p className="text-muted-foreground">
+          Nothing here yet. Drop a PDF above and the facts will start arriving.
+        </p>
+      </div>
+    );
   }
 
   return (
-    <ul className="border border-border">
-      {rows.map((row) => (
-        <li className="border-border border-b last:border-b-0" key={row.id}>
+    <div className="border border-border">
+      {rows.map((row) => {
+        const working = row.status === "pending" || row.status === "parsing";
+        return (
           <Link
-            className="flex items-baseline justify-between gap-4 px-3 py-2 hover:bg-muted"
+            className="flex items-center justify-between gap-6 border-border border-b px-3 py-2.5 transition-colors last:border-b-0 hover:bg-muted/60"
             href={`/documents/${row.id}`}
+            key={row.id}
           >
             <span className="min-w-0">
               <span className="block truncate font-medium text-sm">{row.filename}</span>
-              <span className="block text-muted-foreground text-xs">
-                {row.pageCount ?? "?"} pages · {row.facts.published} facts
-                {row.facts.rejected > 0 && ` · ${row.facts.rejected} refused`}
-                {row.pipelineVersion && ` · v${row.pipelineVersion}`}
+              <Cite className="mt-0.5 block">
+                {row.pageCount ?? "?"} pages
+                {row.pipelineVersion ? `  ·  v${row.pipelineVersion}` : ""}
+              </Cite>
+            </span>
+
+            {row.job ? (
+              <span className="shrink-0 animate-working text-evidence text-sm">
+                {row.job.stage} {row.job.status}
               </span>
-            </span>
-            <span
-              className={`shrink-0 text-xs ${
-                row.status === "failed" ? "text-destructive" : "text-muted-foreground"
-              }`}
-            >
-              {row.status === "failed" && row.failureReason
-                ? row.failureReason.replaceAll("_", " ")
-                : row.job
-                  ? `${row.job.stage} ${row.job.status}`
-                  : row.status}
-            </span>
+            ) : working ? (
+              <span className="shrink-0 animate-working text-evidence text-sm">queued</span>
+            ) : row.status === "failed" ? (
+              <span
+                className="shrink-0 text-destructive text-sm"
+                title={row.failureDetail ?? undefined}
+              >
+                {row.failureReason?.replaceAll("_", " ") ?? "failed"}
+              </span>
+            ) : (
+              <span className="flex shrink-0 gap-6 text-right">
+                <Count label="facts" value={row.facts.published} />
+                <Count
+                  label="refused"
+                  tone={row.facts.rejected > 0 ? "text-muted-foreground" : undefined}
+                  value={row.facts.rejected}
+                />
+              </span>
+            )}
           </Link>
-        </li>
-      ))}
-    </ul>
+        );
+      })}
+    </div>
+  );
+}
+
+function Count({ label, tone, value }: { label: string; tone?: string; value: number }) {
+  return (
+    <span className="block">
+      <span className={cn("block font-mono text-sm", tone)}>{value}</span>
+      <span className="block text-muted-foreground text-xs">{label}</span>
+    </span>
   );
 }
