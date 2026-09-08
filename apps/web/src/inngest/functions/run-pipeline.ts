@@ -3,8 +3,9 @@ import type { JobStage } from "@superfact/db";
 import { and, eq, inArray } from "@superfact/db/orm";
 
 import { useLogger } from "@/lib/evlog";
-import { parseDocument } from "@/lib/parse";
+import { planPageBatches } from "@/lib/parse";
 import { inngest, jobRunRequested } from "../client";
+import { parsePageBatch } from "./parse-page-batch";
 
 /**
  * The durable spine: parse, then extract, then relate.
@@ -105,7 +106,7 @@ export const runPipeline = inngest.createFunction(
     });
 
     for (const stage of JOB_STAGES) {
-      await step.run(`stage:${stage}`, async () => {
+      const batches = await step.run(`stage:${stage}`, async () => {
         const log = useLogger();
         log.set({ job: { ...job, stages: [stage] } });
 
@@ -115,7 +116,7 @@ export const runPipeline = inngest.createFunction(
         if (stage !== "parse") {
           // Phase 04 fills in extract, phases 06-07 relate.
           log.info(`stage ${stage} finished with no work to do`);
-          return;
+          return [];
         }
 
         const [document] = await db
@@ -124,14 +125,39 @@ export const runPipeline = inngest.createFunction(
           .where(eq(documents.id, job.documentId));
 
         if (!document) throw new Error(`no document ${job.documentId}`);
+        if (!document.pageCount) throw new Error(`document ${document.id} has no page count`);
 
-        const summary = await parseDocument(document);
-        log.set({ parse: summary });
-        log.info(`parsed ${summary.parsed} of ${summary.pageCount} pages`);
+        const planned = planPageBatches(document.pageCount);
+        log.info(`parsing ${document.pageCount} pages in ${planned.length} batch(es)`);
+        return planned;
+      });
+
+      if (batches.length === 0) continue;
+
+      // Each batch is its own function run, so each gets its own request budget. The parent only
+      // waits here — it is suspended between the invocations rather than holding a connection
+      // open — so the length of a document stops being a constraint on any single request.
+      const results = await Promise.all(
+        batches.map((batch) =>
+          step.invoke(`parse:pages:${batch.from}-${batch.to}`, {
+            function: parsePageBatch,
+            data: { jobId: job.id, documentId: job.documentId, from: batch.from, to: batch.to },
+          }),
+        ),
+      );
+
+      await step.run("stage:parse:summary", async () => {
+        const parsed = results.reduce((n, r) => n + r.parsed, 0);
+        const failed = results.reduce((n, r) => n + r.failed, 0);
+        const pageCount = results.reduce((n, r) => Math.max(n, r.pageCount), 0);
+
+        const log = useLogger();
+        log.set({ job: { ...job, stages: ["parse"] }, parse: { pageCount, parsed, failed } });
+        log.info(`parsed ${parsed} of ${pageCount} pages`);
 
         // Every page failing is a failed document, not a document that parsed into nothing.
-        if (summary.parsed === 0 && summary.pageCount > 0) {
-          throw new Error(`every page of document ${document.id} failed to parse`);
+        if (parsed === 0 && pageCount > 0) {
+          throw new Error(`every page of document ${job.documentId} failed to parse`);
         }
       });
     }

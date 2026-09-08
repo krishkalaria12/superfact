@@ -17,7 +17,28 @@ import { reconstructTables } from "./tables";
  * A page that fails is written as a failed row rather than skipped. A document that reports success
  * over a hole is the one outcome the plan refuses, and coverage counts are only honest if the
  * failures are rows too.
+ *
+ * Work is done a range at a time rather than a document at a time, because the deployment target
+ * caps how long one request may run and a long document does not fit in one. {@link planPageBatches}
+ * cuts the ranges; each is parsed by its own function run.
  */
+
+/**
+ * Pages per batch.
+ *
+ * At roughly 0.8 seconds a page this keeps a batch near twenty seconds, comfortably inside a
+ * serverless request budget while still amortising the cost of fetching and opening the PDF —
+ * which every batch pays again, and which is the reason batches are not smaller.
+ */
+export const PAGES_PER_BATCH = 25;
+
+/** Half-open, zero-based page ranges covering `pageCount`, matching MuPDF's page indices. */
+export function planPageBatches(pageCount: number): { from: number; to: number }[] {
+  return Array.from({ length: Math.ceil(pageCount / PAGES_PER_BATCH) }, (_, i) => ({
+    from: i * PAGES_PER_BATCH,
+    to: Math.min(pageCount, (i + 1) * PAGES_PER_BATCH),
+  }));
+}
 
 /**
  * Pages rendered before their rasters are uploaded together.
@@ -25,8 +46,12 @@ import { reconstructTables } from "./tables";
  * MuPDF is single-threaded WebAssembly, so rendering gains nothing from concurrency; uploading is
  * network-bound and gains a great deal. Chunking keeps both busy without holding a hundred page
  * images in memory at once.
+ *
+ * Four rather than eight because batches now run in parallel: this number multiplies by the
+ * concurrency limit on `parse-page-batch`, and their product is what the storage provider's rate
+ * limit actually sees.
  */
-const CHUNK = 8;
+const CHUNK = 4;
 
 export type ParseSummary = {
   pageCount: number;
@@ -82,7 +107,18 @@ function readOnePage(document: mupdf.Document, index: number): RenderedPage {
   }
 }
 
-export async function parseDocument(document: Document): Promise<ParseSummary> {
+/**
+ * Parses pages `[from, to)` and writes their rows.
+ *
+ * Every batch fetches and opens the document again. That is the price of each batch being its own
+ * request, and it is a small one beside rendering: opening a seven-megabyte PDF costs about a
+ * second, rendering twenty-five pages costs twenty.
+ */
+export async function parsePageRange(
+  document: Document,
+  from: number,
+  to: number,
+): Promise<ParseSummary> {
   if (!document.storageUrl) {
     throw new Error(`document ${document.id} has no stored bytes to parse`);
   }
@@ -99,9 +135,12 @@ export async function parseDocument(document: Document): Promise<ParseSummary> {
 
   try {
     const pageCount = opened.countPages();
+    const range = [...Array(Math.max(0, Math.min(to, pageCount) - from)).keys()].map(
+      (i) => i + from,
+    );
     const rows: NewPage[] = [];
 
-    for (const indices of chunked([...Array(pageCount).keys()], CHUNK)) {
+    for (const indices of chunked(range, CHUNK)) {
       const rendered = indices.map((index) => readOnePage(opened, index));
 
       const stored = await mapWithConcurrency(rendered, CHUNK, async (page) => {
@@ -165,6 +204,8 @@ export async function parseDocument(document: Document): Promise<ParseSummary> {
       for (const batch of chunked(rows, 50)) await db.insert(pages).values(batch);
     }
 
+    // Intake counted the pages, but it counted them from bytes rather than from the parser. This
+    // is the authoritative number, and it costs nothing to keep it true.
     await db.update(documents).set({ pageCount }).where(eq(documents.id, document.id));
 
     return {

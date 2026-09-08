@@ -116,6 +116,13 @@ producing any. Inngest replays completed steps on a later attempt, so a stage th
 double its output; clearing first makes a retry idempotent without every future stage remembering
 to check.
 
+Parse fans out: the stage plans page ranges and `step.invoke`s `parse-page-batch` once per range,
+so each range is its own function run with its own request budget. Splitting it into steps would
+not have worked — Inngest checkpoints several steps of one function into a single request, and the
+deployment target caps how long that may run. At roughly a second a page, a long document does not
+fit in one. `PAGES_PER_BATCH` times `CHUNK` times the batch concurrency limit is what the storage
+provider sees at once; raising any of them raises that product.
+
 ## Commands
 
 `pnpm dev` (Next.js on 3001 and the Inngest dev server on 8288) · `pnpm check-types` ·

@@ -1,3 +1,4 @@
+import { parsePageBatch } from "./parse-page-batch";
 import { runPipeline } from "./run-pipeline";
 
-export const functions = [runPipeline];
+export const functions = [runPipeline, parsePageBatch];
