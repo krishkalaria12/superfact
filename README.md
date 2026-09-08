@@ -147,6 +147,8 @@ parser cannot read contributes no facts and reports as low-density in its page q
 - A page-level pipeline version, so a failed run resumes instead of re-parsing.
 - Measured accuracy over a small hand-labelled slice, which would let the prefilter thresholds and
   the similarity floor be tuned against something other than judgement.
+- Splitting an extraction batch and retrying its halves when a response comes back unparseable,
+  which adapts to how much a section actually yields instead of guessing a batch size.
 - Better subjects for table facts, by preferring the row header over a generated cell label.
 - Full-text search as a third retrieval path, but only after pairs are visibly being missed.
 - An HNSW index, but only after exact vector search is measurably slow.

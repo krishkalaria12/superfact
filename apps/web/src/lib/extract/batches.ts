@@ -2,7 +2,17 @@ import type { ParsedLine } from "@superfact/db/contracts";
 
 import type { ExtractionPage, PageLineBlock, ProseBatch } from "./types";
 
-export const DEFAULT_PROSE_BATCH_CHARS = 12_000;
+/**
+ * Characters of prose in one extraction call.
+ *
+ * Sized by what comes back, not by what goes in. The extractor is told to emit one assertion per
+ * proposition, and dense financial prose yields them at a startling rate — a single four-page batch
+ * has produced 965 candidates. At twelve thousand characters the response ran past what one
+ * structured output can carry and came back unparseable, which failed a hundred-page document twice
+ * on the same kind of section. Four thousand keeps a call's output well inside the limit; the extra
+ * calls cost little now that they run concurrently.
+ */
+export const DEFAULT_PROSE_BATCH_CHARS = 4_000;
 
 function median(values: number[]): number {
   if (values.length === 0) return 0;
