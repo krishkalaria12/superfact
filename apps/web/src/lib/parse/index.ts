@@ -6,7 +6,7 @@ import * as mupdf from "mupdf";
 
 import { pageRasterObjectId, putObject } from "@/lib/storage";
 import { detectBands } from "./bands";
-import { mapWithConcurrency } from "./concurrency";
+import { mapWithConcurrency } from "@/lib/concurrency";
 import { RASTER_SCALE, renderPage } from "./raster";
 import { readPageGeometry } from "./structured-text";
 import { reconstructTables } from "./tables";
