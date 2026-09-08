@@ -6,7 +6,8 @@ import { planPairBatches } from "@/lib/adjudication/relate";
 import { embeddingModel } from "@/lib/embedding";
 import { useLogger } from "@/lib/evlog";
 import { pairDocument } from "@/lib/pairing";
-import { planPageBatches } from "@/lib/parse";
+import { planExtractionBatches } from "@/lib/extract";
+import { planPageBatches, PAGES_PER_BATCH } from "@/lib/parse";
 import { inngest, jobRunRequested } from "../client";
 import { adjudicatePairBatchFunction } from "./adjudicate-pair-batch";
 import { extractPageBatch } from "./extract-page-batch";
@@ -88,7 +89,7 @@ export const runPipeline = inngest.createFunction(
       }
     },
   },
-  async ({ event, step }) => {
+  async ({ attempt, event, step }) => {
     const { jobId } = event.data;
 
     const job = await step.run("start", async () => {
@@ -108,20 +109,54 @@ export const runPipeline = inngest.createFunction(
       });
       log.info("pipeline started");
 
-      return { id: row.id, documentId: row.documentId, pipelineVersion: row.pipelineVersion };
+      return {
+        id: row.id,
+        documentId: row.documentId,
+        pipelineVersion: row.pipelineVersion,
+        startedAt: Date.now(),
+      };
     });
 
+    // `job` carries the run's wall-clock start, which the typed log field does not want.
+    const jobFields = {
+      id: job.id,
+      documentId: job.documentId,
+      pipelineVersion: job.pipelineVersion,
+    };
+
     for (const stage of JOB_STAGES) {
-      const batches = await step.run(`stage:${stage}`, async () => {
+      // Both stages that fan out plan here, in the one step that also clears the previous run's
+      // output. Parse plans page ranges; extract plans ranked page lists.
+      type StagePlan = { parse: { from: number; to: number }[]; extract: number[][] };
+
+      const plan: StagePlan = await step.run(`stage:${stage}`, async (): Promise<StagePlan> => {
         const log = useLogger();
-        log.set({ job: { ...job, stages: [stage] } });
+        log.set({ job: { ...jobFields, stages: [stage] } });
 
         await db.update(jobs).set({ stage }).where(eq(jobs.id, job.id));
         await clearStageOutput(stage, job.documentId, job.pipelineVersion);
 
         // Relate does not fan out over pages: pairing reads whole documents against each other,
         // so there is nothing to plan and the stage runs as one step below.
-        if (stage === "relate") return [];
+        if (stage === "relate") return { parse: [], extract: [] };
+
+        if (stage === "extract") {
+          // Ranked, not sequential. Parsing has already mapped the document, so extraction spends
+          // its first batches on the pages carrying tables and summary headings — which is what
+          // puts real facts in front of a reviewer while body prose is still running.
+          const parsed = await db
+            .select({
+              pageNumber: pages.pageNumber,
+              lines: pages.lines,
+              tables: pages.tables,
+            })
+            .from(pages)
+            .where(and(eq(pages.documentId, job.documentId), eq(pages.status, "parsed")));
+
+          const planned = planExtractionBatches(parsed, PAGES_PER_BATCH);
+          log.info(`extract planned ${parsed.length} parsed pages in ${planned.length} batch(es)`);
+          return { parse: [], extract: planned };
+        }
 
         const [document] = await db
           .select()
@@ -132,8 +167,8 @@ export const runPipeline = inngest.createFunction(
         if (!document.pageCount) throw new Error(`document ${document.id} has no page count`);
 
         const planned = planPageBatches(document.pageCount);
-        log.info(`${stage} planned ${document.pageCount} pages in ${planned.length} batch(es)`);
-        return planned;
+        log.info(`parse planned ${document.pageCount} pages in ${planned.length} batch(es)`);
+        return { parse: planned, extract: [] };
       });
 
       if (stage === "relate") {
@@ -149,7 +184,7 @@ export const runPipeline = inngest.createFunction(
 
           const log = useLogger();
           log.set({
-            job: { ...job, stages: ["relate"] },
+            job: { ...jobFields, stages: ["relate"] },
             pairing: {
               focus: run.stats.focus,
               corpus: run.stats.corpus,
@@ -222,7 +257,7 @@ export const runPipeline = inngest.createFunction(
           );
 
           const log = useLogger();
-          log.set({ job: { ...job, stages: ["relate"] }, adjudicate: summary });
+          log.set({ job: { ...jobFields, stages: ["relate"] }, adjudicate: summary });
           log.info(
             `judged ${summary.pairs} pair(s): ${summary.contradicts} contradiction(s) after ${summary.downgraded} downgrade(s)`,
           );
@@ -230,19 +265,18 @@ export const runPipeline = inngest.createFunction(
         continue;
       }
 
-      if (batches.length === 0) continue;
-
       if (stage === "extract") {
+        if (plan.extract.length === 0) continue;
+
         const results = await Promise.all(
-          batches.map((batch) =>
-            step.invoke(`extract:pages:${batch.from}-${batch.to}`, {
+          plan.extract.map((pageNumbers, index) =>
+            step.invoke(`extract:batch:${index}`, {
               function: extractPageBatch,
               data: {
                 jobId: job.id,
                 documentId: job.documentId,
                 pipelineVersion: job.pipelineVersion,
-                from: batch.from,
-                to: batch.to,
+                pageNumbers,
               },
             }),
           ),
@@ -260,7 +294,7 @@ export const runPipeline = inngest.createFunction(
             { pages: 0, candidates: 0, stored: 0, published: 0, rejected: 0 },
           );
           const log = useLogger();
-          log.set({ job: { ...job, stages: ["extract"] }, extract: summary });
+          log.set({ job: { ...jobFields, stages: ["extract"] }, extract: summary });
           log.info(
             `published ${summary.published} of ${summary.stored} assertions from ${summary.pages} pages`,
           );
@@ -268,11 +302,13 @@ export const runPipeline = inngest.createFunction(
         continue;
       }
 
+      if (plan.parse.length === 0) continue;
+
       // Each batch is its own function run, so each gets its own request budget. The parent only
       // waits here — it is suspended between the invocations rather than holding a connection
       // open — so the length of a document stops being a constraint on any single request.
       const results = await Promise.all(
-        batches.map((batch) =>
+        plan.parse.map((batch) =>
           step.invoke(`parse:pages:${batch.from}-${batch.to}`, {
             function: parsePageBatch,
             data: { jobId: job.id, documentId: job.documentId, from: batch.from, to: batch.to },
@@ -286,7 +322,7 @@ export const runPipeline = inngest.createFunction(
         const pageCount = results.reduce((n, r) => Math.max(n, r.pageCount), 0);
 
         const log = useLogger();
-        log.set({ job: { ...job, stages: ["parse"] }, parse: { pageCount, parsed, failed } });
+        log.set({ job: { ...jobFields, stages: ["parse"] }, parse: { pageCount, parsed, failed } });
         log.info(`parsed ${parsed} of ${pageCount} pages`);
 
         // Every page failing is a failed document, not a document that parsed into nothing.
@@ -298,17 +334,32 @@ export const runPipeline = inngest.createFunction(
 
     await step.run("finish", async () => {
       const log = useLogger();
-      log.set({ job });
+      log.set({
+        job: { ...jobFields, stages: [...JOB_STAGES] },
+        timing: {
+          stage: "relate",
+          durationMs: Date.now() - job.startedAt,
+          attempt: attempt + 1,
+        },
+      });
 
       await db
         .update(jobs)
         .set({ status: "completed", completedAt: new Date() })
         .where(eq(jobs.id, job.id));
 
-      // Stamping the version here is what makes the next upload of these bytes reusable.
+      // Stamping the version here is what makes the next upload of these bytes reusable. The
+      // failure fields are cleared in the same write: a document that failed once and then
+      // succeeded would otherwise report ready while still carrying the old reason, and the
+      // failures view reads documents.
       await db
         .update(documents)
-        .set({ status: "ready", pipelineVersion: job.pipelineVersion })
+        .set({
+          status: "ready",
+          pipelineVersion: job.pipelineVersion,
+          failureReason: null,
+          failureDetail: null,
+        })
         .where(eq(documents.id, job.documentId));
 
       log.info("pipeline completed");

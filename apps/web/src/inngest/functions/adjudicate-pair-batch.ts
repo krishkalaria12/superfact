@@ -20,10 +20,11 @@ export const adjudicatePairBatchFunction = inngest.createFunction(
     retries: 2,
     concurrency: { limit: 2 },
   },
-  async ({ event, step }) => {
+  async ({ attempt, event, step }) => {
     const { jobId, documentId, pipelineVersion, pairs } = event.data;
 
     return step.run("adjudicate", async () => {
+      const startedAt = Date.now();
       const result = await adjudicatePairBatch(pairs, adjudicationModel, pipelineVersion);
       // Named, not just counted. A pair that produced no edge is a missing relationship, and the
       // reason is the only thing that says whether the model or the data was at fault.
@@ -46,6 +47,7 @@ export const adjudicatePairBatchFunction = inngest.createFunction(
           skipped: result.stats.skipped,
           skips,
         },
+        timing: { stage: "relate", durationMs: Date.now() - startedAt, attempt: attempt + 1 },
       });
       log.info(`adjudicated ${result.stats.pairs} pair(s) into ${result.written} edge(s)`);
 

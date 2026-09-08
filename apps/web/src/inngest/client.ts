@@ -22,14 +22,19 @@ export const pageBatchRequested = eventType("document/page-batch.requested", {
   }),
 });
 
-/** One parsed page range handed to the phase 04 extractor. */
+/**
+ * One set of parsed pages handed to the extractor.
+ *
+ * A list rather than a range, because extraction runs densest-page-first: the pages in a batch are
+ * whichever ranked together, and they are rarely contiguous. Page numbers are one-based here,
+ * matching the `pages` rows, where the parse events are zero-based to match MuPDF.
+ */
 export const extractionBatchRequested = eventType("document/extraction-batch.requested", {
   schema: z.object({
     jobId: z.uuid(),
     documentId: z.uuid(),
     pipelineVersion: z.string().min(1),
-    from: z.number().int().nonnegative(),
-    to: z.number().int().positive(),
+    pageNumbers: z.array(z.number().int().positive()).min(1),
   }),
 });
 

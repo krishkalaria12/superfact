@@ -80,6 +80,19 @@ export type SuperfactFields = {
     skips: string[];
   };
   /**
+   * How a stage or batch actually ran, as opposed to what it produced.
+   *
+   * The plan has no metrics harness and no benchmark, so these numbers are the only account of
+   * where a run's time went and how often it had to be retried. `attempt` comes from Inngest and
+   * is 1 on a first try; anything higher on a completed run means a retry that succeeded quietly,
+   * which is exactly the kind of thing that is invisible without a field for it.
+   */
+  timing: {
+    stage: JobStage;
+    durationMs: number;
+    attempt: number;
+  };
+  /**
    * The result of a phase exit check. `differences` names the paths that failed, so a broken
    * check is diagnosable from the log alone without re-running it.
    */

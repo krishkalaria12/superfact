@@ -1,7 +1,7 @@
 import { assertions, db, pages } from "@superfact/db";
 import type { NewAssertion } from "@superfact/db";
 import { unionBbox } from "@superfact/db/contracts";
-import { and, asc, eq, gte, inArray, lt, ne } from "@superfact/db/orm";
+import { and, asc, eq, inArray, ne } from "@superfact/db/orm";
 
 import { useLogger } from "@/lib/evlog";
 import { extractAssertionCandidates } from "@/lib/extract";
@@ -18,10 +18,11 @@ export const extractPageBatch = inngest.createFunction(
     retries: 2,
     concurrency: { limit: 2 },
   },
-  async ({ event, step }) => {
-    const { jobId, documentId, pipelineVersion, from, to } = event.data;
+  async ({ attempt, event, step }) => {
+    const { jobId, documentId, pipelineVersion, pageNumbers } = event.data;
 
     return step.run("extract", async () => {
+      const startedAt = Date.now();
       const parsedPages = await db
         .select()
         .from(pages)
@@ -29,8 +30,7 @@ export const extractPageBatch = inngest.createFunction(
           and(
             eq(pages.documentId, documentId),
             eq(pages.status, "parsed"),
-            gte(pages.pageNumber, from + 1),
-            lt(pages.pageNumber, to + 1),
+            inArray(pages.pageNumber, pageNumbers),
           ),
         )
         .orderBy(asc(pages.pageNumber));
@@ -51,8 +51,8 @@ export const extractPageBatch = inngest.createFunction(
           ),
         );
 
-      // A child invocation may fail after writing one insert chunk. Clearing only this range makes
-      // its retry idempotent without disturbing sibling ranges that already completed.
+      // A child invocation may fail after writing one insert chunk. Clearing only these pages makes
+      // its retry idempotent without disturbing sibling batches that already completed.
       if (parsedPages.length > 0) {
         await db.delete(assertions).where(
           and(
@@ -147,8 +147,9 @@ export const extractPageBatch = inngest.createFunction(
           published,
           rejected: rows.length - published,
         },
+        timing: { stage: "extract", durationMs: Date.now() - startedAt, attempt: attempt + 1 },
       });
-      log.info(`extracted pages ${from + 1}-${to}`);
+      log.info(`extracted ${parsedPages.length} page(s): ${pageNumbers.join(", ")}`);
 
       return {
         pages: parsedPages.length,

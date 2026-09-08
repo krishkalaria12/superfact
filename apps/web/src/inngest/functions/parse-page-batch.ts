@@ -25,17 +25,22 @@ export const parsePageBatch = inngest.createFunction(
     // Multiplied by CHUNK in the parser, this is how many uploads storage sees at once.
     concurrency: { limit: 2 },
   },
-  async ({ event, step }) => {
+  async ({ attempt, event, step }) => {
     const { jobId, documentId, from, to } = event.data;
 
     return step.run("parse", async () => {
+      const startedAt = Date.now();
       const [document] = await db.select().from(documents).where(eq(documents.id, documentId));
       if (!document) throw new Error(`no document ${documentId}`);
 
       const summary = await parsePageRange(document, from, to);
 
       const log = useLogger();
-      log.set({ job: { id: jobId, documentId, stages: ["parse"] }, parse: summary });
+      log.set({
+        job: { id: jobId, documentId, stages: ["parse"] },
+        parse: summary,
+        timing: { stage: "parse", durationMs: Date.now() - startedAt, attempt: attempt + 1 },
+      });
       log.info(`parsed pages ${from + 1}-${to}`);
 
       return summary;

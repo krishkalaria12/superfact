@@ -199,6 +199,18 @@ producing any. Inngest replays completed steps on a later attempt, so a stage th
 double its output; clearing first makes a retry idempotent without every future stage remembering
 to check.
 
+Extraction runs densest page first. Parsing has already mapped the document, so
+`apps/web/src/lib/extract/priority.ts` ranks pages on resolved table cells, a summary-ish heading,
+and text length, and the batches go out in that order. It changes the order and never the set — a
+run's output is identical whichever order it ran in — and what it buys is that a reviewer watching
+the fact list sees financial tables fill in while body prose is still going. Extraction batches
+therefore carry a list of page numbers rather than a range, and those numbers are one-based to match
+`pages` rows where the parse events are zero-based to match MuPDF.
+
+The heading list in that file is ordinary English section words. It is the closest the codebase
+comes to knowing what a document says, so keep it short: a longer list starts encoding what we
+expect these six PDFs to contain, which is the demo-overfitting risk the plan names.
+
 Parse fans out: the stage plans page ranges and `step.invoke`s `parse-page-batch` once per range,
 so each range is its own function run with its own request budget. Splitting it into steps would
 not have worked — Inngest checkpoints several steps of one function into a single request, and the
@@ -218,10 +230,26 @@ provider sees at once; raising any of them raises that product.
 plan has no gold set, so parser and prompt changes are judged by re-reading output over the same
 fixed pages.
 
+Work is never repeated. `POST /api/documents` hashes first, so a file already processed at the
+current pipeline version comes back `reused` after one index lookup — no parse, no extraction, no
+model call. A new document pairs against what is already stored and never rebuilds it: `pairDocument`
+takes one focus document against the rest of the corpus, so adding a fourth PDF costs the fourth
+PDF. Only a `PIPELINE_VERSION` change invalidates that, and it invalidates everything at once.
+
+One gap worth knowing: a job that failed partway re-parses the document from scratch, because
+`pages` rows carry no pipeline version and so cannot be told apart from a previous version's. Fixing
+it means a column; nothing in the plan's exit checks needs it yet.
+
 `POST /api/documents` takes a multipart `file` field and answers with one of four outcomes:
 `accepted`, `reused`, `reprocessing`, or `refused`. A refusal is a 200 carrying a reason code, not
 an error — refusing a scan is the system working. `GET /api/documents/:id` and `GET /api/jobs/:id`
 are read-only and both report per-page coverage.
+
+`GET /api/documents/:id/facts` answers mid-run, which is the point of it. Each extraction batch
+commits its rows as it finishes, so a client polling this watches facts arrive while later pages are
+still being read. `progress` travels in the same response because forty facts means something
+different at page 12 of 400 than at the end, and `progress.job` going null is how a caller knows to
+stop polling. `?status=rejected` returns what the grounding gate refused, with reason codes.
 
 `GET /api/documents/:id/pairs` is the phase 06 exit check: it recomputes candidate pairing for one
 document and answers with each pair's two assertions in full, the retrieval paths that found it, and
@@ -236,8 +264,8 @@ assertions, a rejection, and an edge, projects them into the JSON export, and di
 against what went in — non-empty `differences` means a field is being lost. It cleans up after
 itself and refuses in production.
 
-`pnpm --filter web test` runs the node:test suites over normalization, candidate pairing, and
-adjudication — the places where a rule is cheaper to test than to inspect. They run under plain
+`pnpm --filter web test` runs the node:test suites over normalization, candidate pairing,
+adjudication, and extraction priority — the places where a rule is cheaper to test than to inspect. They run under plain
 `node --test`, which is why every relative import inside `packages/db` carries an explicit `.ts`
 extension: node's ESM resolver will not guess one, and the contracts are imported for real rather
 than as types.
