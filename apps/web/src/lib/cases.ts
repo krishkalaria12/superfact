@@ -125,6 +125,13 @@ export async function buildDemoCases(): Promise<DemoCase[]> {
         ? `The grounding gate refused this candidate and stored it with a reason instead of dropping it.`
         : null;
 
+  // Keep the visible artifact and its explanation about the same failure. A failed document or
+  // page has no assertion to show; attaching an unrelated rejection makes the case look staged.
+  const failureFact =
+    !refusedDocument && !failedPage && rejectedRow
+      ? toRejectedAssertion({ ...rejectedRow, embedding: null })
+      : null;
+
   return [
     {
       key: "corroboration",
@@ -163,7 +170,7 @@ export async function buildDemoCases(): Promise<DemoCase[]> {
       looksFor:
         "Nothing was silently dropped. The refusal carries a reason code, and the repair is to fix the cause and re-upload: the content hash makes the re-run cheap.",
       edge: null,
-      fact: rejectedRow ? toRejectedAssertion({ ...rejectedRow, embedding: null }) : null,
+      fact: failureFact,
       note: failureNote,
     },
   ];

@@ -174,11 +174,9 @@ so its behaviour can be read without credentials.
 
 ## Additional notes
 
-**Two of the four cases are currently empty, and the page says so.** `/cases` picks each example by
-query over whatever the system produced. Two Delhivery documents from different fiscal years share
-almost no directly comparable figures, so the corpus has produced reconciliations but no
-corroboration or surviving contradiction. Processing the FY24 annual report alongside the FY24
-earnings presentation is what would fill them; that document's run is the one still failing.
+**The four cases are selected from live output.** `/cases` picks each example by query over whatever
+the system produced. Nothing there names a document, predicate, subject, or value, so another
+corpus may honestly leave a case empty instead of substituting a staged example.
 
 **The tuning has one round of evidence behind it, not many.** Every threshold — the similarity
 floor, the rounding tolerance, the prose batch size — was set from reading output

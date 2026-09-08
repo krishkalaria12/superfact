@@ -17,12 +17,12 @@ export function CaseView({ case: item }: { case: DemoCase }) {
 
       {item.note && <p className="text-muted-foreground text-sm">{item.note}</p>}
 
-      {empty ? (
+      {empty && !item.note ? (
         <p className="border border-border border-dashed p-4 text-muted-foreground text-sm">
           Nothing in the current corpus fits this case. Upload two documents that discuss the same
           figures and it will fill in.
         </p>
-      ) : item.edge ? (
+      ) : empty ? null : item.edge ? (
         <EdgeDetail edge={item.edge} />
       ) : item.fact ? (
         <FactDetail fact={item.fact} />
