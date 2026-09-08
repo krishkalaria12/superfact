@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-import { documentStatus } from "../schema/documents";
-import { publishedAssertionSchema } from "./assertions";
-import { claimEdgeSchema } from "./edges";
-import { failuresSchema } from "./failures";
+import { documentStatus } from "../schema/documents.ts";
+import { publishedAssertionSchema } from "./assertions.ts";
+import { claimEdgeSchema } from "./edges.ts";
+import { failuresSchema } from "./failures.ts";
 
 /** How far a document got, and how much of it was readable. */
 export const documentSummarySchema = z.object({

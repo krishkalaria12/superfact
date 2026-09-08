@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { parsedLineSchema } from "./geometry";
-import { columnBandSchema, reconstructedTableSchema } from "./tables";
+import { parsedLineSchema } from "./geometry.ts";
+import { columnBandSchema, reconstructedTableSchema } from "./tables.ts";
 
 /**
  * Signals that say whether a page was worth reading, recorded per page rather than per document

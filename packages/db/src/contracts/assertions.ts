@@ -6,9 +6,9 @@ import {
   assertionSource,
   periodPrecision,
   valueType,
-} from "../schema/assertions";
-import { bboxSchema } from "./geometry";
-import { qualifiersSchema, tableContextSchema } from "./context";
+} from "../schema/assertions.ts";
+import { bboxSchema } from "./geometry.ts";
+import { qualifiersSchema, tableContextSchema } from "./context.ts";
 
 export const modalitySchema = z.enum(assertionModality.enumValues);
 export const sourceSchema = z.enum(assertionSource.enumValues);

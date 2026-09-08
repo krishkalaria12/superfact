@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { edgeReasonCode, edgeVerdict } from "../schema/edges";
+import { edgeReasonCode, edgeVerdict } from "../schema/edges.ts";
 
 export const verdictSchema = z.enum(edgeVerdict.enumValues);
 export const reasonCodeSchema = z.enum(edgeReasonCode.enumValues);

@@ -11,10 +11,10 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import type { PageQuality } from "../contracts/pages";
-import type { ColumnBand, ReconstructedTable } from "../contracts/tables";
-import type { ParsedLine } from "../contracts/geometry";
-import { documents } from "./documents";
+import type { PageQuality } from "../contracts/pages.ts";
+import type { ColumnBand, ReconstructedTable } from "../contracts/tables.ts";
+import type { ParsedLine } from "../contracts/geometry.ts";
+import { documents } from "./documents.ts";
 
 export const pageStatus = pgEnum("page_status", ["parsed", "failed"]);
 

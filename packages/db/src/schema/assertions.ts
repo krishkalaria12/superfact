@@ -13,10 +13,10 @@ import {
   vector,
 } from "drizzle-orm/pg-core";
 
-import type { Bbox } from "../contracts/geometry";
-import type { Qualifiers, TableContext } from "../contracts/context";
-import { documents } from "./documents";
-import { pages } from "./pages";
+import type { Bbox } from "../contracts/geometry.ts";
+import type { Qualifiers, TableContext } from "../contracts/context.ts";
+import { documents } from "./documents.ts";
+import { pages } from "./pages.ts";
 
 /**
  * Two values, not five. "GDP will be 6.5%" and "the RBI projects 6.5%" share a modality and

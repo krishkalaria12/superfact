@@ -5,9 +5,9 @@ import type {
   RejectedAssertion,
   RunExport,
   StoredAssertion,
-} from "./contracts";
-import type { ComparisonField } from "./contracts/edges";
-import type { Assertion, Document, Edge, NewAssertion, NewEdge } from "./schema";
+} from "./contracts/index.ts";
+import type { ComparisonField } from "./contracts/edges.ts";
+import type { Assertion, Document, Edge, NewAssertion, NewEdge } from "./schema/index.ts";
 
 /**
  * Database rows to the shapes the API and the JSON export speak.

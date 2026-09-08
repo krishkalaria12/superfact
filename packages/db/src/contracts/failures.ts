@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-import { documentFailureReason } from "../schema/documents";
-import { pageFailureReason } from "../schema/pages";
-import { rejectedAssertionSchema } from "./assertions";
+import { documentFailureReason } from "../schema/documents.ts";
+import { pageFailureReason } from "../schema/pages.ts";
+import { rejectedAssertionSchema } from "./assertions.ts";
 
 /** A document the system refused outright — encrypted, corrupt, or with no text layer to read. */
 export const documentFailureSchema = z.object({

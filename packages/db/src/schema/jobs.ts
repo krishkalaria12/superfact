@@ -1,6 +1,6 @@
 import { index, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
-import { documents } from "./documents";
+import { documents } from "./documents.ts";
 
 /** The three durable stages a document moves through, in order. */
 export const jobStage = pgEnum("job_stage", ["parse", "extract", "relate"]);

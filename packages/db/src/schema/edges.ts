@@ -9,7 +9,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { assertions } from "./assertions";
+import { assertions } from "./assertions.ts";
 
 /**
  * Four verdicts. Nuance belongs in `reasonCode`; a fifth verdict costs precision on the three the

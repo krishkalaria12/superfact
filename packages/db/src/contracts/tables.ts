@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { bboxSchema } from "./geometry";
+import { bboxSchema } from "./geometry.ts";
 
 /**
  * A reconstructed table, built from coordinates rather than from any ruling the document may or
