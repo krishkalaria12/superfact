@@ -15,27 +15,34 @@ export default async function DocumentPage({
   if (!document) notFound();
 
   return (
-    <main className="container mx-auto flex min-h-0 max-w-7xl flex-col gap-4 px-4 py-6">
-      <header className="flex flex-wrap items-baseline justify-between gap-2">
+    <main className="flex h-full min-h-0 flex-col">
+      <div className="mx-auto flex w-full max-w-350 flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-4 py-3">
         <div className="min-w-0">
-          <Link className="text-muted-foreground text-xs hover:text-foreground" href="/">
-            ← All documents
+          <Link
+            className="text-muted-foreground text-xs transition-colors hover:text-foreground"
+            href="/"
+          >
+            All documents
           </Link>
-          <h1 className="truncate font-semibold text-lg tracking-tight">{document.filename}</h1>
+          <h1 className="truncate font-medium text-lg tracking-tight">{document.filename}</h1>
         </div>
         <a
-          className="text-muted-foreground text-xs underline hover:text-foreground"
+          className="text-muted-foreground text-sm transition-colors hover:text-foreground"
           href={`/api/export?documentId=${document.id}`}
         >
-          Export this document as JSON
+          Download this document as JSON
         </a>
-      </header>
+      </div>
 
       {document.status === "failed" && document.failureReason && (
-        <p className="border border-destructive/40 bg-destructive/5 p-3 text-destructive text-sm">
-          Refused: {document.failureReason.replaceAll("_", " ")}
-          {document.failureDetail ? ` — ${document.failureDetail}` : ""}
-        </p>
+        <div className="mx-auto w-full max-w-350 px-4 pb-3">
+          <p className="border border-destructive/30 bg-destructive/5 p-3 text-destructive text-sm">
+            This run stopped: {document.failureReason.replaceAll("_", " ")}.
+            {document.failureDetail ? ` ${document.failureDetail}` : ""} Anything it published
+            before stopping is below. Uploading the file again restarts it from the bytes already
+            stored.
+          </p>
+        </div>
       )}
 
       <Workspace documentId={document.id} />

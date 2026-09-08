@@ -3,82 +3,89 @@
 import type { PublishedAssertion, RejectedAssertion } from "@superfact/db/contracts";
 
 import { EvidenceViewer } from "@/components/evidence-viewer";
+import { Cite, refusalGloss } from "@/components/vocabulary";
 
 /**
  * One fact, opened.
  *
- * Raw value and canonical value sit next to each other on purpose: a published figure has to stay
- * auditable against the page it came from, and showing only the normalized number would hide the
- * one conversion most likely to be wrong.
+ * As printed and canonical sit side by side because a published figure has to stay auditable
+ * against the page it came from. Showing only the converted number would hide the one step most
+ * likely to be wrong, and showing only the printed one would make nothing comparable.
  */
 export function FactDetail({ fact }: { fact: PublishedAssertion | RejectedAssertion }) {
+  const canonical = fact.canonicalValue
+    ? `${fact.canonicalValue}${fact.unit ? ` ${fact.unit}` : ""}`
+    : null;
+
   return (
-    <div className="space-y-4">
-      <header className="space-y-1">
-        <h3 className="font-medium leading-snug">{fact.subject}</h3>
-        <p className="text-muted-foreground text-sm">{fact.predicate}</p>
+    <article className="space-y-5">
+      <header className="space-y-1.5">
+        <h2 className="text-balance font-medium text-xl leading-snug tracking-tight">
+          {fact.subject}
+        </h2>
+        <p className="text-muted-foreground">{fact.predicate}</p>
       </header>
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border border-border p-3 text-sm">
-        <Field label="As printed" value={fact.rawValue} mono />
-        <Field
-          label="Canonical"
-          mono
-          value={
-            fact.canonicalValue
-              ? `${fact.canonicalValue}${fact.unit ? ` ${fact.unit}` : ""}`
-              : "not normalized"
-          }
-        />
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-border border-y py-3">
+        <span className="font-mono text-lg">{fact.rawValue}</span>
+        {canonical && canonical !== fact.rawValue && (
+          <>
+            <span className="text-muted-foreground text-sm">normalizes to</span>
+            <span className="font-mono text-evidence text-lg">{canonical}</span>
+          </>
+        )}
+        {fact.normalizationRule && <Cite>by {fact.normalizationRule}</Cite>}
+      </div>
+
+      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
         <Field
           label="Period"
-          value={
-            fact.period
-              ? `${fact.period.start} to ${fact.period.end} (${fact.period.precision.replace("_", " ")})`
-              : "none stated"
-          }
+          value={fact.period ? `${fact.period.start} to ${fact.period.end}` : "none stated"}
+          note={fact.period?.precision.replace("_", " ")}
         />
-        <Field label="Modality" value={fact.modality} />
-        <Field label="Attributed to" value={fact.attributedTo ?? "the document itself"} />
-        <Field label="Rule" value={fact.normalizationRule ?? "none"} mono />
+        <Field
+          label="Stated as"
+          value={fact.modality === "projected" ? "a projection" : "an observation"}
+        />
+        <Field
+          label="Asserted by"
+          value={fact.attributedTo ?? "the document itself"}
+          note={fact.attributedTo ? "reported, not asserted" : undefined}
+        />
       </dl>
 
       {Object.keys(fact.qualifiers).length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {Object.entries(fact.qualifiers).map(([key, value]) => (
-            <span
-              className="border border-border px-2 py-0.5 text-xs"
-              key={key}
-              title={`${key}: ${value}`}
-            >
-              <span className="text-muted-foreground">{key.replaceAll("_", " ")}</span> {value}
+            <span className="border border-border px-2 py-0.5 text-xs" key={key}>
+              <span className="text-muted-foreground">{key.replaceAll("_", " ")} </span>
+              {value}
             </span>
           ))}
         </div>
       )}
 
       {fact.status === "rejected" && (
-        <div className="border border-destructive/40 bg-destructive/5 p-3 text-sm">
-          <p className="font-medium text-destructive">
-            Refused: {fact.rejectionReason.replaceAll("_", " ")}
+        <div className="border border-destructive/30 bg-destructive/5 p-3">
+          <p className="font-medium text-destructive text-sm">
+            Not published, because {refusalGloss(fact.rejectionReason)}.
           </p>
           {fact.rejectionDetail && (
-            <p className="mt-1 text-muted-foreground">{fact.rejectionDetail}</p>
+            <p className="mt-1 text-muted-foreground text-sm">{fact.rejectionDetail}</p>
           )}
           <p className="mt-2 text-muted-foreground text-xs">
-            verified {String(fact.verified)} · context complete {String(fact.contextComplete)}
+            Quote checked against the page: {fact.verified ? "passed" : "failed"}. Required context
+            present: {fact.contextComplete ? "yes" : "no"}.
           </p>
         </div>
       )}
 
-      <figure className="space-y-2">
-        <blockquote className="border-border border-l-2 pl-3 text-sm italic">
+      <div className="space-y-2">
+        <blockquote className="border-evidence border-l-2 bg-evidence-wash/40 py-1.5 pl-3 text-sm">
           {fact.evidence.quote}
         </blockquote>
-        <figcaption className="font-mono text-muted-foreground text-xs">
-          {fact.evidence.lineIds.join(" · ")}
-        </figcaption>
-      </figure>
+        <Cite>{fact.evidence.lineIds.join("  ")}</Cite>
+      </div>
 
       <EvidenceViewer
         bbox={fact.evidence.bbox}
@@ -87,15 +94,16 @@ export function FactDetail({ fact }: { fact: PublishedAssertion | RejectedAssert
         pageNumber={fact.page}
         tableContext={fact.tableContext}
       />
-    </div>
+    </article>
   );
 }
 
-function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Field({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="min-w-0">
-      <dt className="text-muted-foreground text-xs uppercase tracking-wide">{label}</dt>
-      <dd className={`break-words ${mono ? "font-mono text-xs" : ""}`}>{value}</dd>
+      <dt className="text-muted-foreground text-xs">{label}</dt>
+      <dd className="break-words text-sm">{value}</dd>
+      {note && <dd className="text-muted-foreground text-xs">{note}</dd>}
     </div>
   );
 }
