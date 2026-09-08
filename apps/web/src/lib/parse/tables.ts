@@ -275,10 +275,16 @@ export function reconstructTables(
       const firstBody = spanned.findIndex(isBodyRow);
       const lastBody = spanned.findLastIndex(isBodyRow);
 
+      // No row of values means this was never a table. Prose sets rows of two and three fragments
+      // all the time — an auditors' report, a governance disclosure, a signature block — and
+      // filing those as tables that failed to resolve would point a later vision read at pages of
+      // running text. A grid is only a grid once something in it is a value.
+      if (firstBody === -1) continue;
+
       // The run is trimmed to its last row of values. Footnotes below a table wrap into two or
       // three segments that cluster as multi-cell rows, and one of those spanning the full table
       // width would otherwise merge every column into one.
-      const gridded = firstBody === -1 ? spanned : spanned.slice(0, lastBody + 1);
+      const gridded = spanned.slice(0, lastBody + 1);
 
       // Everything before the first row of values is heading. Single-cell rows in that stretch are
       // section labels, not column headings, and are left out rather than joined into one.
@@ -286,13 +292,11 @@ export function reconstructTables(
         firstBody <= 0
           ? []
           : gridded.slice(0, firstBody).filter((row) => row.lines.length >= MIN_CELLS_PER_ROW);
-      const bodyRows = firstBody === -1 ? [] : gridded.slice(firstBody);
+      const bodyRows = gridded.slice(firstBody);
       const columns = assignColumns(bodyRows.filter(isBodyRow));
 
       const above = rows.slice(0, run.start).flatMap((row) => row.lines);
-      const below = rows
-        .slice(run.start + (firstBody === -1 ? run.end - run.start + 1 : lastBody + 1))
-        .flatMap((row) => row.lines);
+      const below = rows.slice(run.start + lastBody + 1).flatMap((row) => row.lines);
 
       const bbox =
         unionBbox(gridded.flatMap((row) => row.lines.map((line) => line.bbox))) ??
@@ -300,12 +304,9 @@ export function reconstructTables(
 
       // A grid nobody can read a column out of is worse than no grid: it attaches real numbers to
       // the wrong heading, and the evidence gate cannot catch that because the quote is genuine.
+      // This now means what it says — a real grid that would not resolve, worth a vision read.
       const ragged =
-        columns.length < MIN_CELLS_PER_ROW
-          ? `only ${columns.length} column(s) resolved`
-          : bodyRows.length === 0
-            ? "every row read as a header"
-            : null;
+        columns.length < MIN_CELLS_PER_ROW ? `only ${columns.length} column(s) resolved` : null;
 
       // A table continued past a page break or a section heading has no heading row of its own.
       // Taking the previous table's headings, when the grids line up, is the difference between
