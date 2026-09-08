@@ -2,19 +2,21 @@ import { assertions, db, documents, edges, JOB_STAGES, jobs, pages } from "@supe
 import type { JobStage } from "@superfact/db";
 import { and, eq, inArray } from "@superfact/db/orm";
 
+import { planPairBatches } from "@/lib/adjudication/relate";
 import { embeddingModel } from "@/lib/embedding";
 import { useLogger } from "@/lib/evlog";
 import { pairDocument } from "@/lib/pairing";
 import { planPageBatches } from "@/lib/parse";
 import { inngest, jobRunRequested } from "../client";
+import { adjudicatePairBatchFunction } from "./adjudicate-pair-batch";
 import { extractPageBatch } from "./extract-page-batch";
 import { parsePageBatch } from "./parse-page-batch";
 
 /**
  * The durable spine: parse, then extract, then relate.
  *
- * Relate is candidate pairing from phase 06; the adjudication that turns those pairs into edges
- * arrives at phase 07. What holds across all three stages is that each is safe to run twice. Inngest retries a step on failure
+ * Relate is candidate pairing from phase 06 followed by the adjudication from phase 07 that turns
+ * those pairs into edges. What holds across all three stages is that each is safe to run twice. Inngest retries a step on failure
  * and replays completed steps on a later attempt, so a stage that appended to its output would
  * double it. Each stage therefore clears its own output for this document at this pipeline version
  * before producing any, which makes the run idempotent by construction rather than by every future
@@ -135,7 +137,10 @@ export const runPipeline = inngest.createFunction(
       });
 
       if (stage === "relate") {
-        await step.run("stage:relate:pairs", async () => {
+        // Retrieval first, in one step. Candidate pairs are not stored — they are an intermediate
+        // this step computes and hands straight to the adjudicators, and phase 07's edges are the
+        // durable record of what came of them.
+        const pairs = await step.run("stage:relate:pairs", async () => {
           const run = await pairDocument({
             documentId: job.documentId,
             pipelineVersion: job.pipelineVersion,
@@ -162,9 +167,65 @@ export const runPipeline = inngest.createFunction(
             `paired ${run.stats.focus} assertions into ${run.stats.pairs} candidate pair(s)`,
           );
 
-          // Phase 07 adjudicates these into edges. Until then the pairs are recomputed on demand
-          // at /api/documents/:id/pairs rather than stored, so nothing has to be invalidated.
-          return { pairs: run.stats.pairs };
+          return run.pairs.map((pair) => ({
+            sourceAssertionId: pair.sourceAssertionId,
+            targetAssertionId: pair.targetAssertionId,
+          }));
+        });
+
+        if (pairs.length === 0) continue;
+
+        const judged = await Promise.all(
+          planPairBatches(pairs).map((batch, index) =>
+            step.invoke(`relate:pairs:${index}`, {
+              function: adjudicatePairBatchFunction,
+              data: {
+                jobId: job.id,
+                documentId: job.documentId,
+                pipelineVersion: job.pipelineVersion,
+                pairs: batch,
+              },
+            }),
+          ),
+        );
+
+        await step.run("stage:relate:summary", async () => {
+          const summary = judged.reduce(
+            (total, result) => ({
+              pairs: total.pairs + result.pairs,
+              settled: total.settled + result.settled,
+              judged: total.judged + result.judged,
+              reviewed: total.reviewed + result.reviewed,
+              downgraded: total.downgraded + result.downgraded,
+              withheld: total.withheld + result.withheld,
+              corroborates: total.corroborates + result.corroborates,
+              contradicts: total.contradicts + result.contradicts,
+              reconciles: total.reconciles + result.reconciles,
+              insufficient: total.insufficient + result.insufficient,
+              skipped: total.skipped + result.skipped,
+              skips: [...total.skips, ...result.skips],
+            }),
+            {
+              pairs: 0,
+              settled: 0,
+              judged: 0,
+              reviewed: 0,
+              downgraded: 0,
+              withheld: 0,
+              corroborates: 0,
+              contradicts: 0,
+              reconciles: 0,
+              insufficient: 0,
+              skipped: 0,
+              skips: [] as string[],
+            },
+          );
+
+          const log = useLogger();
+          log.set({ job: { ...job, stages: ["relate"] }, adjudicate: summary });
+          log.info(
+            `judged ${summary.pairs} pair(s): ${summary.contradicts} contradiction(s) after ${summary.downgraded} downgrade(s)`,
+          );
         });
         continue;
       }

@@ -6,9 +6,10 @@
 export * from "drizzle-orm";
 
 /**
- * Table aliasing, which lives in `pg-core` rather than the package root.
+ * The `pg-core` surface the app needs, which does not come through the package root.
  *
- * Candidate pairing joins `assertions` to itself, so the alias is what lets a hand-written query
- * still take its column names from the schema instead of repeating them as strings.
+ * `alias` lets candidate pairing join `assertions` to itself while still taking column names from
+ * the schema. `PgColumn` types the upsert helper that names a column in an `excluded.` reference,
+ * so an edge upsert cannot drift from the column it means.
  */
-export { alias } from "drizzle-orm/pg-core";
+export { alias, type PgColumn } from "drizzle-orm/pg-core";

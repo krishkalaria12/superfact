@@ -32,6 +32,11 @@ Do not add these back without asking: Python or any second service, OCR, a secon
 browser-side PDF.js, accuracy metrics, gold sets, or benchmark evaluation. Each was considered and
 cut, and the plan's changelog says why.
 
+Models are named in the plan and pinned in code: `gpt-5.6-luna` extracts, `gpt-5.6-terra` adjudicates,
+Terra at `reasoningEffort: "high"` runs the contradiction second pass, and `text-embedding-3-small`
+serves retrieval. Escalation answers to one condition — a first pass that said `contradicts` — and
+never to a general risk score.
+
 Parsing is `mupdf` (WASM) in-process. The evidence viewer draws boxes on stored page rasters using
 the coordinates the parser emitted, so parser and viewer share one coordinate space. Rasters are
 grayscale PNG at `RASTER_SCALE` (2×), and the scale is written to the page row rather than assumed
@@ -57,8 +62,7 @@ failing stage would report success.
 `apps/web` (app, API, jobs) · `packages/db` (Drizzle schema) · `packages/env` (validated env) ·
 `packages/ui` (shared shadcn primitives, imported as `@superfact/ui/*`) · `packages/config`.
 
-Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. `edges` is the only one still
-empty; phase 07 fills it.
+Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. All five are filled by a run.
 
 Zod contracts live beside the schema in `packages/db/src/contracts`, imported as
 `@superfact/db/contracts`. Enum values are declared once as `pgEnum`s in the schema and the
@@ -140,10 +144,49 @@ Three rules there are load-bearing:
   adjudication budget and reconciles nothing. Each run pairs one document against everything else
   stored, so a cross-document pair is discovered once, by whichever document arrived second.
 
-Phase 06 stores no pairs. They are an intermediate that phase 07 turns into edges, so the stage logs
-its counts and `GET /api/documents/:id/pairs` recomputes them on demand — two queries, no model
-call. Read `capped` and `dropped` in the log before trusting a quiet run: a cap that keeps firing is
-starving the adjudicator.
+Pairs are never stored. They are an intermediate the `stage:relate:pairs` step computes and hands
+straight to the adjudicators, so the stage logs its counts and `GET /api/documents/:id/pairs`
+recomputes them on demand — two queries, no model call. Read `capped` and `dropped` in the log
+before trusting a quiet run: a cap that keeps firing is starving the adjudicator.
+
+`apps/web/src/lib/adjudication` is the second half of `relate`. `compare.ts` is pure and runs first:
+it decides what actually differs between two assertions across subject, predicate, time, scope,
+unit, value, modality, and attribution. Every field lands in `matched`, `mismatched`, or `unknown`,
+and that third bucket is load-bearing — "these periods differ" and "one of these has no period" are
+different situations, and merging them would let a contradiction be declared over a qualifier nobody
+compared.
+
+Four rules hold the phase together:
+
+- **Code owns what differs; the model owns what it means.** A mismatch `compare.ts` found cannot be
+  talked away by the model. The model may only add a match for a field code left `unknown`, and
+  only from the two evidence quotes.
+- **`contradicts` is enforced, not accepted.** It survives only when `value` is mismatched and all
+  five of `DECISIVE_FIELDS` are matched. Otherwise it is rewritten to `insufficient` with a code
+  naming what stopped it, and the count lands in the log as `withheld`. This is the invariant that
+  AGENTS.md states as a rule and this is where it is a code path.
+- **Only `contradicts` escalates.** The second pass runs Terra at high reasoning effort with the
+  burden reversed — argue these are reconcilable — and it is the sole escalation condition. That
+  keeps the expensive call to tens of pairs rather than thousands.
+- **A downgrade keeps both readings.** When the review finds a decisive qualifier the edge becomes
+  `reconciles` and the first pass survives in `priorVerdict`/`priorExplanation`. It is the most
+  persuasive thing the product shows and it is only legible if both passes stay.
+
+Deterministic settlement is the cost control: a pair that agrees on value and on all five decisive
+fields is written as `corroborates` with no model call at all. Settling demands every decisive field
+be _positively_ matched, never merely un-mismatched — two claims scoped along axes that never meet
+(one `segment`, one `geography`) read as `unknown`, and asking costs one call where a wrong
+corroboration costs the reviewer's trust.
+
+Edge direction carries meaning, so the writer picks it: for `time_supersession`, `vintage_difference`,
+and `projection_vs_actual` the source is the side that wins — the later period, or the observation
+over the forecast. Other codes order by id, arbitrary but stable, so the same pair lands on one row
+whichever document's run reaches it. Writes are an upsert on the ordered pair, which is what makes a
+batch retry safe after the stage cleared its edges once.
+
+A pair whose model call keeps failing is recorded as a skip and named in the wide event rather than
+failing the batch. One flaky call should not cost a document every relationship it has, and a skip
+that is counted, logged, and returned by the edges endpoint is not a swallowed failure.
 
 Intake is hash, refuse, store, enqueue, in that order — `apps/web/src/lib/documents.ts`. Hashing
 first means a known file costs one index lookup; validating second means a scan or a corrupt file
@@ -184,13 +227,20 @@ are read-only and both report per-page coverage.
 document and answers with each pair's two assertions in full, the retrieval paths that found it, and
 what the prefilter and the cap excluded. `limit` defaults to 100.
 
+`GET /api/documents/:id/edges` is the phase 07 exit check: every judged relationship touching the
+document, contradictions first, each with both claims attached and the fields that matched and did
+not. `?verdict=contradicts` narrows to the four cases the demo turns on.
+
 `POST /api/dev/round-trip` is the phase 01 exit check: it writes a hand-written page, two published
 assertions, a rejection, and an edge, projects them into the JSON export, and diffs the result
 against what went in — non-empty `differences` means a field is being lost. It cleans up after
 itself and refuses in production.
 
-`pnpm --filter web test` runs the node:test suites over normalization and candidate pairing — the
-two places where a rule is cheaper to test than to inspect.
+`pnpm --filter web test` runs the node:test suites over normalization, candidate pairing, and
+adjudication — the places where a rule is cheaper to test than to inspect. They run under plain
+`node --test`, which is why every relative import inside `packages/db` carries an explicit `.ts`
+extension: node's ESM resolver will not guess one, and the contracts are imported for real rather
+than as types.
 
 Run `pnpm check` and `pnpm check-types` before calling work done.
 

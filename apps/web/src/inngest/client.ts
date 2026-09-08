@@ -33,6 +33,22 @@ export const extractionBatchRequested = eventType("document/extraction-batch.req
   }),
 });
 
+/**
+ * One slice of a document's candidate pairs, for the relate stage to fan out over.
+ *
+ * The pairs travel in the event rather than being read back, because phase 06 stores none: they are
+ * an intermediate the parent computes once and hands down. Two ids a pair is small enough that a
+ * batch stays well inside the event size limit.
+ */
+export const pairBatchRequested = eventType("document/pair-batch.requested", {
+  schema: z.object({
+    jobId: z.uuid(),
+    documentId: z.uuid(),
+    pipelineVersion: z.string().min(1),
+    pairs: z.array(z.object({ sourceAssertionId: z.uuid(), targetAssertionId: z.uuid() })).min(1),
+  }),
+});
+
 export const inngest = new Inngest({
   id: "superfact",
   // The local Inngest dev server needs no keys; cloud mode requires a signing key.

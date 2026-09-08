@@ -58,6 +58,28 @@ export type SuperfactFields = {
     truncated: boolean;
   };
   /**
+   * What the relate stage decided, per batch of pairs.
+   *
+   * `withheld` and `downgraded` are the two worth watching. The first counts contradictions the
+   * invariant refused because decisive context was not matched; the second counts those the
+   * reversed-burden review defused. Both are the product working, and a run where neither ever
+   * fires means the checks are not reaching anything.
+   */
+  adjudicate: {
+    pairs: number;
+    settled: number;
+    judged: number;
+    reviewed: number;
+    downgraded: number;
+    withheld: number;
+    corroborates: number;
+    contradicts: number;
+    reconciles: number;
+    insufficient: number;
+    skipped: number;
+    skips: string[];
+  };
+  /**
    * The result of a phase exit check. `differences` names the paths that failed, so a broken
    * check is diagnosable from the log alone without re-running it.
    */

@@ -8,7 +8,7 @@
     "dev:inngest": "inngest-cli dev --no-discovery -u http://localhost:3001/api/inngest",
     "build": "next build",
     "check-types": "tsc --noEmit",
-    "test": "node --test src/lib/grounding/*.test.ts src/lib/pairing/*.test.ts",
+    "test": "node --test src/lib/grounding/*.test.ts src/lib/pairing/*.test.ts src/lib/adjudication/*.test.ts",
     "start": "next start"
   },
   "dependencies": {

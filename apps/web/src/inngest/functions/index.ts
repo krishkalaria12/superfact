@@ -1,5 +1,11 @@
+import { adjudicatePairBatchFunction } from "./adjudicate-pair-batch";
 import { extractPageBatch } from "./extract-page-batch";
 import { parsePageBatch } from "./parse-page-batch";
 import { runPipeline } from "./run-pipeline";
 
-export const functions = [runPipeline, parsePageBatch, extractPageBatch];
+export const functions = [
+  runPipeline,
+  parsePageBatch,
+  extractPageBatch,
+  adjudicatePairBatchFunction,
+];
