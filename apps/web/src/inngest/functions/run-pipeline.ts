@@ -2,7 +2,9 @@ import { assertions, db, documents, edges, JOB_STAGES, jobs, pages } from "@supe
 import type { JobStage } from "@superfact/db";
 import { and, eq, inArray } from "@superfact/db/orm";
 
+import { embeddingModel } from "@/lib/embedding";
 import { useLogger } from "@/lib/evlog";
+import { pairDocument } from "@/lib/pairing";
 import { planPageBatches } from "@/lib/parse";
 import { inngest, jobRunRequested } from "../client";
 import { extractPageBatch } from "./extract-page-batch";
@@ -11,8 +13,8 @@ import { parsePageBatch } from "./parse-page-batch";
 /**
  * The durable spine: parse, then extract, then relate.
  *
- * Parse is real from phase 03; extract and relate stay placeholders until phases 04 and 06-07.
- * What holds across all three is that each is safe to run twice. Inngest retries a step on failure
+ * Relate is candidate pairing from phase 06; the adjudication that turns those pairs into edges
+ * arrives at phase 07. What holds across all three stages is that each is safe to run twice. Inngest retries a step on failure
  * and replays completed steps on a later attempt, so a stage that appended to its output would
  * double it. Each stage therefore clears its own output for this document at this pipeline version
  * before producing any, which makes the run idempotent by construction rather than by every future
@@ -115,11 +117,9 @@ export const runPipeline = inngest.createFunction(
         await db.update(jobs).set({ stage }).where(eq(jobs.id, job.id));
         await clearStageOutput(stage, job.documentId, job.pipelineVersion);
 
-        if (stage === "relate") {
-          // Phases 06-07 fill in relation and adjudication.
-          log.info(`stage ${stage} finished with no work to do`);
-          return [];
-        }
+        // Relate does not fan out over pages: pairing reads whole documents against each other,
+        // so there is nothing to plan and the stage runs as one step below.
+        if (stage === "relate") return [];
 
         const [document] = await db
           .select()
@@ -133,6 +133,41 @@ export const runPipeline = inngest.createFunction(
         log.info(`${stage} planned ${document.pageCount} pages in ${planned.length} batch(es)`);
         return planned;
       });
+
+      if (stage === "relate") {
+        await step.run("stage:relate:pairs", async () => {
+          const run = await pairDocument({
+            documentId: job.documentId,
+            pipelineVersion: job.pipelineVersion,
+            model: embeddingModel,
+          });
+
+          const log = useLogger();
+          log.set({
+            job: { ...job, stages: ["relate"] },
+            pairing: {
+              focus: run.stats.focus,
+              corpus: run.stats.corpus,
+              embedded: run.embedded,
+              missingEmbeddings: run.missingEmbeddings,
+              deterministic: run.stats.deterministic,
+              semantic: run.stats.semantic,
+              pairs: run.stats.pairs,
+              capped: run.stats.capped,
+              dropped: run.stats.dropped,
+              truncated: run.truncated,
+            },
+          });
+          log.info(
+            `paired ${run.stats.focus} assertions into ${run.stats.pairs} candidate pair(s)`,
+          );
+
+          // Phase 07 adjudicates these into edges. Until then the pairs are recomputed on demand
+          // at /api/documents/:id/pairs rather than stored, so nothing has to be invalidated.
+          return { pairs: run.stats.pairs };
+        });
+        continue;
+      }
 
       if (batches.length === 0) continue;
 

@@ -39,6 +39,25 @@ export type SuperfactFields = {
     rejected: number;
   };
   /**
+   * Retrieval coverage from the pairing stage.
+   *
+   * `capped` and `dropped` are here because the phase's named risk is a pair that never reaches
+   * the adjudicator. A run that keeps capping is starving phase 07, and the only way that is
+   * visible without re-running the stage is if the counts travel with the event.
+   */
+  pairing: {
+    focus: number;
+    corpus: number;
+    embedded: number;
+    missingEmbeddings: number;
+    deterministic: number;
+    semantic: number;
+    pairs: number;
+    capped: number;
+    dropped: number;
+    truncated: boolean;
+  };
+  /**
    * The result of a phase exit check. `differences` names the paths that failed, so a broken
    * check is diagnosable from the log alone without re-running it.
    */

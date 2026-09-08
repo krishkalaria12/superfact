@@ -57,8 +57,8 @@ failing stage would report success.
 `apps/web` (app, API, jobs) · `packages/db` (Drizzle schema) · `packages/env` (validated env) ·
 `packages/ui` (shared shadcn primitives, imported as `@superfact/ui/*`) · `packages/config`.
 
-Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. Only `assertions` and `edges` are
-still empty; phase 04 fills them.
+Five tables: `documents`, `pages`, `assertions`, `edges`, `jobs`. `edges` is the only one still
+empty; phase 07 fills it.
 
 Zod contracts live beside the schema in `packages/db/src/contracts`, imported as
 `@superfact/db/contracts`. Enum values are declared once as `pgEnum`s in the schema and the
@@ -77,6 +77,13 @@ Embeddings are `text-embedding-3-small` at 1536 dimensions, over subject and pre
 They serve retrieval in candidate pairing and nothing else: a verdict never rests on similarity, and
 numbers never go through vectors — ₹7,225 crore and ₹72.25 billion are a coin flip in vector space.
 The dimension is fixed in the schema, so changing the model means a migration and a full re-embed.
+
+They are written by the `relate` stage, not by `extract`. A vector is a retrieval index derived from
+two immutable columns, so filling one in is not the kind of mutation the immutability invariant
+forbids — and the stage that reads it is the honest place to build it. The backfill covers every
+published assertion at the pipeline version, not only the focus document's, because a neighbour
+without a vector is invisible to the semantic path and would stay unpairable until something
+happened to re-run it.
 
 Files live in UploadThing. It assigns its own `{uuid}_{filename}` key and will not take a path, so
 anything a stage may re-upload needs a `customId` derived from content hash and page index —
@@ -110,6 +117,33 @@ line above the table in its band (proximity picks the registration number on the
 sheet), and the unit line is a fully parenthesised line above it. The unit must come from there —
 on the Delhivery notes the rupee glyph is missing from the font's encoding map and decodes as `I`,
 so the character in the cell says nothing.
+
+`apps/web/src/lib/pairing` is the `relate` stage's retrieval half. Two paths run as one SQL
+statement each and their results are unioned: the **deterministic** path self-joins `assertions` on
+equal canonical value, which is exact because phase 05 already converted the scales; the
+**semantic** path is a `cross join lateral` top-k over pgvector, exact search with no HNSW index.
+Both hand back nothing but ids. Everything that decides what a match _means_ — predicate
+relatedness, value-type compatibility, unit comparability, the cap — lives in `buildCandidatePairs`,
+which is pure and unit-tested, because "known pairs never reach the adjudicator" is this phase's
+named risk and it is not a thing you can eyeball in a query plan.
+
+Three rules there are load-bearing:
+
+- **The prefilter never drops on time, unit, or scope.** Those differences are what reconciliation
+  explains; a filter that removed them would leave the adjudicator only the easy pairs. It drops on
+  incompatible value types and on predicates too unrelated to be discussing the same thing, and
+  nothing else.
+- **A value match outranks every semantic neighbour.** Scores are banded so the deterministic floor
+  sits above the semantic ceiling, which means the cap can never cut an exact canonical match to
+  make room for a close-sounding one.
+- **Pairs are cross-document only.** A document restating its own number costs the same
+  adjudication budget and reconciles nothing. Each run pairs one document against everything else
+  stored, so a cross-document pair is discovered once, by whichever document arrived second.
+
+Phase 06 stores no pairs. They are an intermediate that phase 07 turns into edges, so the stage logs
+its counts and `GET /api/documents/:id/pairs` recomputes them on demand — two queries, no model
+call. Read `capped` and `dropped` in the log before trusting a quiet run: a cap that keeps firing is
+starving the adjudicator.
 
 Intake is hash, refuse, store, enqueue, in that order — `apps/web/src/lib/documents.ts`. Hashing
 first means a known file costs one index lookup; validating second means a scan or a corrupt file
@@ -146,10 +180,17 @@ fixed pages.
 an error — refusing a scan is the system working. `GET /api/documents/:id` and `GET /api/jobs/:id`
 are read-only and both report per-page coverage.
 
+`GET /api/documents/:id/pairs` is the phase 06 exit check: it recomputes candidate pairing for one
+document and answers with each pair's two assertions in full, the retrieval paths that found it, and
+what the prefilter and the cap excluded. `limit` defaults to 100.
+
 `POST /api/dev/round-trip` is the phase 01 exit check: it writes a hand-written page, two published
 assertions, a rejection, and an edge, projects them into the JSON export, and diffs the result
 against what went in — non-empty `differences` means a field is being lost. It cleans up after
 itself and refuses in production.
+
+`pnpm --filter web test` runs the node:test suites over normalization and candidate pairing — the
+two places where a rule is cheaper to test than to inspect.
 
 Run `pnpm check` and `pnpm check-types` before calling work done.
 
