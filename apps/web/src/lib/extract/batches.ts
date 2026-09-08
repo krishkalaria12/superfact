@@ -1,6 +1,6 @@
 import type { ParsedLine } from "@superfact/db/contracts";
 
-import type { ExtractionPage, PageLineBlock, ProseBatch } from "./types";
+import type { ExtractionPage, PageLineBlock, ProseBatch } from "./types.ts";
 
 /**
  * Characters of prose in one extraction call.

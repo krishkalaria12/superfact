@@ -2,12 +2,12 @@ import { assertionCandidateSchema } from "@superfact/db/contracts";
 import type { AssertionCandidate } from "@superfact/db/contracts";
 import { z } from "zod";
 
-import { mapWithConcurrency } from "@/lib/concurrency";
+import { mapWithConcurrency } from "../concurrency.ts";
 
-import { batchProseBySection } from "./batches";
-import { EXTRACTION_SYSTEM_PROMPT, prosePrompt, tablePrompt } from "./prompts";
-import { computeSalience } from "./salience";
-import { batchTableInputs } from "./tables";
+import { batchProseBySection } from "./batches.ts";
+import { EXTRACTION_SYSTEM_PROMPT, prosePrompt, tablePrompt } from "./prompts.ts";
+import { computeSalience } from "./salience.ts";
+import { batchTableInputs } from "./tables.ts";
 import type {
   ExtractedCandidate,
   ExtractionDiagnostic,
@@ -16,7 +16,7 @@ import type {
   RepetitionCorpusEntry,
   StructuredOutputModel,
   TableExtractionInput,
-} from "./types";
+} from "./types.ts";
 
 /**
  * What the model is actually asked for.
@@ -73,6 +73,44 @@ export type ExtractOptions = {
   repetitionCorpus?: readonly RepetitionCorpusEntry[];
 };
 
+/**
+ * Names the parser already supplies, which the model must not re-supply as qualifiers.
+ *
+ * A table cell arrives with its title, headers, unit line, and footnotes attached by code, and the
+ * model kept copying them back as qualifier keys — along with `cellId` and `tableId`, which are our
+ * own identifiers. That is not context about the claim, and it is actively harmful downstream:
+ * adjudication compares scope on the qualifier keys two assertions share, so a per-cell id can
+ * never match and a repeated `title` matches for the wrong reason.
+ *
+ * A document that genuinely names a qualifier "title" loses nothing worth keeping; the parser's
+ * title is already on the row.
+ */
+const SUPPLIED_CONTEXT_KEYS = new Set([
+  "title",
+  "columnheader",
+  "column",
+  "rowheader",
+  "row",
+  "unitline",
+  "unit",
+  "footnote",
+  "footnotes",
+  "cellid",
+  "tableid",
+  "pagenumber",
+  "page",
+  "lineid",
+  "lineids",
+]);
+
+function toQualifiers(pairs: readonly { key: string; value: string }[]) {
+  return Object.fromEntries(
+    pairs
+      .filter(({ key }) => !SUPPLIED_CONTEXT_KEYS.has(key.toLowerCase().replace(/[^a-z0-9]/g, "")))
+      .map(({ key, value }) => [key, value]),
+  );
+}
+
 function diagnostic(id: string, reason: ExtractionDiagnostic["reason"], error: unknown) {
   return { inputId: id, reason, detail: error instanceof Error ? error.message : String(error) };
 }
@@ -86,12 +124,17 @@ function diagnostic(id: string, reason: ExtractionDiagnostic["reason"], error: u
  * swallowed: they travel in `diagnostics` and land in the stage's wide event.
  */
 export class ExtractionIncompleteError extends Error {
-  constructor(public readonly result: ExtractionResult) {
+  // Assigned rather than declared as a constructor parameter property: node's type stripping runs
+  // the test suite over these modules directly, and it cannot rewrite that syntax.
+  readonly result: ExtractionResult;
+
+  constructor(result: ExtractionResult) {
     const failures = result.diagnostics.filter((item) => item.reason === "model_error");
     super(
       `extraction incomplete: ${failures.map((item) => `${item.inputId}: ${item.detail}`).join("; ")}`,
     );
     this.name = "ExtractionIncompleteError";
+    this.result = result;
   }
 }
 
@@ -216,9 +259,7 @@ export async function extractAssertionCandidates(
       const converted = assertionCandidateSchema.safeParse({
         ...modelCandidate,
         ...sourceAndContext,
-        qualifiers: Object.fromEntries(
-          modelCandidate.qualifiers.map(({ key, value }) => [key, value]),
-        ),
+        qualifiers: toQualifiers(modelCandidate.qualifiers),
       });
       if (!converted.success) {
         diagnostics.push(diagnostic(work.id, "invalid_output", z.prettifyError(converted.error)));

@@ -8,7 +8,7 @@ import type {
 } from "@superfact/db/contracts";
 import { unionBbox } from "@superfact/db/contracts";
 
-import { bandOf } from "./bands";
+import { bandOf } from "./bands.ts";
 
 /**
  * Tables rebuilt from coordinates.

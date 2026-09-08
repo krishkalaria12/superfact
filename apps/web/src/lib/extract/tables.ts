@@ -1,6 +1,6 @@
 import type { TableCell } from "@superfact/db/contracts";
 
-import type { ExtractionPage, TableExtractionBatch, TableExtractionInput } from "./types";
+import type { ExtractionPage, TableExtractionBatch, TableExtractionInput } from "./types.ts";
 
 function rowHeader(cells: readonly TableCell[]): TableCell | undefined {
   return [...cells].sort((a, b) => a.column - b.column).find((cell) => !/\d/.test(cell.text));

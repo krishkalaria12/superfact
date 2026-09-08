@@ -1,6 +1,6 @@
 import type { AssertionCandidate } from "@superfact/db/contracts";
 
-import type { RepetitionCorpusEntry } from "./types";
+import type { RepetitionCorpusEntry } from "./types.ts";
 
 const NUMBER = /(?:^|[^\p{L}])[-+]?\d[\d,.]*(?:%|\b)/u;
 
