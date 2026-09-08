@@ -22,6 +22,17 @@ export const pageBatchRequested = eventType("document/page-batch.requested", {
   }),
 });
 
+/** One parsed page range handed to the phase 04 extractor. */
+export const extractionBatchRequested = eventType("document/extraction-batch.requested", {
+  schema: z.object({
+    jobId: z.uuid(),
+    documentId: z.uuid(),
+    pipelineVersion: z.string().min(1),
+    from: z.number().int().nonnegative(),
+    to: z.number().int().positive(),
+  }),
+});
+
 export const inngest = new Inngest({
   id: "superfact",
   // The local Inngest dev server needs no keys; cloud mode requires a signing key.

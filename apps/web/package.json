@@ -10,10 +10,12 @@
     "start": "next start"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.60",
     "@superfact/db": "workspace:*",
     "@superfact/env": "workspace:*",
     "@superfact/ui": "workspace:*",
     "@swc/helpers": "^0.5.23",
+    "ai": "^7.0.93",
     "babel-plugin-react-compiler": "^1.0.0",
     "dotenv": "catalog:",
     "evlog": "^2.28.1",

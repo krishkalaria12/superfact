@@ -1,0 +1,157 @@
+import { assertions, db, pages } from "@superfact/db";
+import type { NewAssertion } from "@superfact/db";
+import { unionBbox } from "@superfact/db/contracts";
+import { and, asc, eq, gte, inArray, lt, ne } from "@superfact/db/orm";
+
+import { useLogger } from "@/lib/evlog";
+import { extractAssertionCandidates } from "@/lib/extract";
+import { extractionModel } from "@/lib/extraction-model";
+import { extractionBatchRequested, inngest } from "../client";
+
+const INSERT_CHUNK = 100;
+
+export const extractPageBatch = inngest.createFunction(
+  {
+    id: "extract-page-batch",
+    triggers: [extractionBatchRequested],
+    retries: 2,
+    concurrency: { limit: 2 },
+  },
+  async ({ event, step }) => {
+    const { jobId, documentId, pipelineVersion, from, to } = event.data;
+
+    return step.run("extract", async () => {
+      const parsedPages = await db
+        .select()
+        .from(pages)
+        .where(
+          and(
+            eq(pages.documentId, documentId),
+            eq(pages.status, "parsed"),
+            gte(pages.pageNumber, from + 1),
+            lt(pages.pageNumber, to + 1),
+          ),
+        )
+        .orderBy(asc(pages.pageNumber));
+
+      const corpus = await db
+        .select({
+          documentId: assertions.documentId,
+          subject: assertions.subject,
+          predicate: assertions.predicate,
+          rawValue: assertions.rawValue,
+          unit: assertions.unit,
+        })
+        .from(assertions)
+        .where(
+          and(
+            ne(assertions.documentId, documentId),
+            eq(assertions.pipelineVersion, pipelineVersion),
+          ),
+        );
+
+      // A child invocation may fail after writing one insert chunk. Clearing only this range makes
+      // its retry idempotent without disturbing sibling ranges that already completed.
+      if (parsedPages.length > 0) {
+        await db.delete(assertions).where(
+          and(
+            eq(assertions.documentId, documentId),
+            eq(assertions.pipelineVersion, pipelineVersion),
+            inArray(
+              assertions.pageId,
+              parsedPages.map((page) => page.id),
+            ),
+          ),
+        );
+      }
+
+      const result = await extractAssertionCandidates(
+        parsedPages.map((page) => ({
+          documentId,
+          pageNumber: page.pageNumber,
+          lines: page.lines,
+          tables: page.tables,
+        })),
+        extractionModel,
+        { repetitionCorpus: corpus },
+      );
+
+      const pageByLineId = new Map(
+        parsedPages.flatMap((page) => page.lines.map((line) => [line.id, page] as const)),
+      );
+      const rows: NewAssertion[] = [];
+      let crossPage = 0;
+
+      for (const extracted of result.candidates) {
+        const citedPages = new Set(
+          extracted.candidate.evidence.lineIds.map((lineId) => pageByLineId.get(lineId)?.id),
+        );
+        citedPages.delete(undefined);
+        if (citedPages.size !== 1) {
+          crossPage += 1;
+          continue;
+        }
+
+        const page = parsedPages.find((item) => item.id === [...citedPages][0]);
+        if (!page) continue;
+        const lineById = new Map(page.lines.map((line) => [line.id, line]));
+        const candidate = extracted.candidate;
+
+        rows.push({
+          documentId,
+          pageId: page.id,
+          pageNumber: page.pageNumber,
+          subject: candidate.subject,
+          predicate: candidate.predicate,
+          rawValue: candidate.rawValue,
+          unit: candidate.unit,
+          valueType: candidate.valueType,
+          qualifiers: candidate.qualifiers,
+          modality: candidate.modality,
+          attributedTo: candidate.attributedTo,
+          source: candidate.source,
+          tableContext: candidate.tableContext,
+          evidenceQuote: candidate.evidence.quote,
+          evidenceLineIds: candidate.evidence.lineIds,
+          evidenceBbox: unionBbox(
+            candidate.evidence.lineIds.flatMap((id) => {
+              const line = lineById.get(id);
+              return line ? [line.bbox] : [];
+            }),
+          ),
+          verified: false,
+          contextComplete: false,
+          status: "rejected",
+          rejectionReason: "missing_context",
+          rejectionDetail: "candidate awaiting phase 05 grounding",
+          confidence: candidate.confidence,
+          salience: extracted.salience,
+          pipelineVersion,
+        });
+      }
+
+      for (let offset = 0; offset < rows.length; offset += INSERT_CHUNK) {
+        await db.insert(assertions).values(rows.slice(offset, offset + INSERT_CHUNK));
+      }
+
+      const log = useLogger();
+      log.set({
+        job: { id: jobId, documentId, pipelineVersion, stages: ["extract"] },
+        extract: {
+          pages: parsedPages.length,
+          candidates: result.candidates.length,
+          stored: rows.length,
+          rejected: result.diagnostics.length + crossPage,
+        },
+      });
+      log.info(`extracted pages ${from + 1}-${to}`);
+
+      return {
+        pages: parsedPages.length,
+        candidates: result.candidates.length,
+        stored: rows.length,
+        rejected: result.diagnostics.length + crossPage,
+      };
+    });
+  },
+);

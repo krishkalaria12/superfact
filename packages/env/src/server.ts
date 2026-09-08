@@ -17,7 +17,7 @@ export const env = createEnv({
     DATABASE_URL: z.string().min(1),
 
     // Model provider for extraction and adjudication. Required from phase 04.
-    OPENAI_API_KEY: z.string().min(1).optional(),
+    OPENAI_API_KEY: z.string().min(1),
 
     // UploadThing, for original PDF bytes and rendered page rasters. Required from phase 02:
     // uploads are the only way a document enters the system, so the app is inert without it.

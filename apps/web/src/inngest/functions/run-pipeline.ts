@@ -5,6 +5,7 @@ import { and, eq, inArray } from "@superfact/db/orm";
 import { useLogger } from "@/lib/evlog";
 import { planPageBatches } from "@/lib/parse";
 import { inngest, jobRunRequested } from "../client";
+import { extractPageBatch } from "./extract-page-batch";
 import { parsePageBatch } from "./parse-page-batch";
 
 /**
@@ -75,9 +76,10 @@ export const runPipeline = inngest.createFunction(
       // The document carries the failure too. A run that died is not a document that is still
       // pending, and the failures view reads documents rather than jobs.
       if (job) {
+        const failureReason = job.stage === "extract" ? "extraction_failed" : "parse_failed";
         await db
           .update(documents)
-          .set({ status: "failed", failureReason: "parse_failed", failureDetail: error.message })
+          .set({ status: "failed", failureReason, failureDetail: error.message })
           .where(eq(documents.id, job.documentId));
       }
     },
@@ -113,8 +115,8 @@ export const runPipeline = inngest.createFunction(
         await db.update(jobs).set({ stage }).where(eq(jobs.id, job.id));
         await clearStageOutput(stage, job.documentId, job.pipelineVersion);
 
-        if (stage !== "parse") {
-          // Phase 04 fills in extract, phases 06-07 relate.
+        if (stage === "relate") {
+          // Phases 06-07 fill in relation and adjudication.
           log.info(`stage ${stage} finished with no work to do`);
           return [];
         }
@@ -128,11 +130,44 @@ export const runPipeline = inngest.createFunction(
         if (!document.pageCount) throw new Error(`document ${document.id} has no page count`);
 
         const planned = planPageBatches(document.pageCount);
-        log.info(`parsing ${document.pageCount} pages in ${planned.length} batch(es)`);
+        log.info(`${stage} planned ${document.pageCount} pages in ${planned.length} batch(es)`);
         return planned;
       });
 
       if (batches.length === 0) continue;
+
+      if (stage === "extract") {
+        const results = await Promise.all(
+          batches.map((batch) =>
+            step.invoke(`extract:pages:${batch.from}-${batch.to}`, {
+              function: extractPageBatch,
+              data: {
+                jobId: job.id,
+                documentId: job.documentId,
+                pipelineVersion: job.pipelineVersion,
+                from: batch.from,
+                to: batch.to,
+              },
+            }),
+          ),
+        );
+
+        await step.run("stage:extract:summary", async () => {
+          const summary = results.reduce(
+            (total, result) => ({
+              pages: total.pages + result.pages,
+              candidates: total.candidates + result.candidates,
+              stored: total.stored + result.stored,
+              rejected: total.rejected + result.rejected,
+            }),
+            { pages: 0, candidates: 0, stored: 0, rejected: 0 },
+          );
+          const log = useLogger();
+          log.set({ job: { ...job, stages: ["extract"] }, extract: summary });
+          log.info(`stored ${summary.stored} assertion candidates from ${summary.pages} pages`);
+        });
+        continue;
+      }
 
       // Each batch is its own function run, so each gets its own request budget. The parent only
       // waits here — it is suspended between the invocations rather than holding a connection

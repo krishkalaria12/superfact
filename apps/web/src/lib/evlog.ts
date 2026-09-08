@@ -30,6 +30,13 @@ export type SuperfactFields = {
     parsed: number;
     failed: number;
   };
+  /** Candidate coverage from the extraction stage. */
+  extract: {
+    pages: number;
+    candidates: number;
+    stored: number;
+    rejected: number;
+  };
   /**
    * The result of a phase exit check. `differences` names the paths that failed, so a broken
    * check is diagnosable from the log alone without re-running it.
