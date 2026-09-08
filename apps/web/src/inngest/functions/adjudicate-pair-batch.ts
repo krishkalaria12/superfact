@@ -18,7 +18,7 @@ export const adjudicatePairBatchFunction = inngest.createFunction(
     id: "adjudicate-pair-batch",
     triggers: [pairBatchRequested],
     retries: 2,
-    concurrency: { limit: 2 },
+    concurrency: { limit: 3 },
   },
   async ({ attempt, event, step }) => {
     const { jobId, documentId, pipelineVersion, pairs } = event.data;

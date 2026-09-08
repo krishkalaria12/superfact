@@ -18,7 +18,7 @@ export const extractPageBatch = inngest.createFunction(
     triggers: [extractionBatchRequested],
     retries: 2,
     // Multiplied by MODEL_CONCURRENCY inside the extractor, this is what the provider sees.
-    concurrency: { limit: 3 },
+    concurrency: { limit: 4 },
   },
   async ({ attempt, event, step }) => {
     const { jobId, documentId, pipelineVersion, pageNumbers } = event.data;
