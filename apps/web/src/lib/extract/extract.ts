@@ -16,22 +16,36 @@ import type {
   TableExtractionInput,
 } from "./types";
 
-const modelCandidateSchema = assertionCandidateSchema.omit({ qualifiers: true }).extend({
-  qualifiers: z
-    .array(z.object({ key: z.string().min(1), value: z.string() }))
-    .superRefine((qualifiers, context) => {
-      const seen = new Set<string>();
-      for (const qualifier of qualifiers) {
-        if (seen.has(qualifier.key)) {
-          context.addIssue({
-            code: "custom",
-            message: `duplicate qualifier key: ${qualifier.key}`,
-          });
+/**
+ * What the model is actually asked for.
+ *
+ * `source` and `tableContext` are omitted because code decides both — a prose batch is prose and a
+ * table cell carries the context the parser resolved for it, and every path below overwrites
+ * whatever the model said. Asking anyway cost tokens on a field that could only introduce error,
+ * and `tableContext.footnotes` carries a Zod default, which strict structured output rejects
+ * outright: every property of an object has to be required.
+ *
+ * `qualifiers` becomes a list of pairs for the same reason — an open-ended record has no strict
+ * JSON schema — and is folded back into an object on the way out.
+ */
+const modelCandidateSchema = assertionCandidateSchema
+  .omit({ qualifiers: true, source: true, tableContext: true })
+  .extend({
+    qualifiers: z
+      .array(z.object({ key: z.string().min(1), value: z.string() }))
+      .superRefine((qualifiers, context) => {
+        const seen = new Set<string>();
+        for (const qualifier of qualifiers) {
+          if (seen.has(qualifier.key)) {
+            context.addIssue({
+              code: "custom",
+              message: `duplicate qualifier key: ${qualifier.key}`,
+            });
+          }
+          seen.add(qualifier.key);
         }
-        seen.add(qualifier.key);
-      }
-    }),
-});
+      }),
+  });
 const modelCandidateListSchema = z.array(modelCandidateSchema);
 
 type WorkItem = {

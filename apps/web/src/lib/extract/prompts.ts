@@ -16,5 +16,5 @@ export function prosePrompt(batch: ProseBatch): string {
 }
 
 export function tablePrompt(input: TableExtractionBatch): string {
-  return `Extract assertions from these cells of one table. Interpret each value only with that cell's supplied context. Use source "table" and reproduce the relevant table context.\n${quotedData(input)}`;
+  return `Extract assertions from these cells of one table. Interpret each value only with that cell's supplied context, and copy the cell value exactly.\n${quotedData(input)}`;
 }
