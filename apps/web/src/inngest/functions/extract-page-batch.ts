@@ -6,6 +6,7 @@ import { and, asc, eq, gte, inArray, lt, ne } from "@superfact/db/orm";
 import { useLogger } from "@/lib/evlog";
 import { extractAssertionCandidates } from "@/lib/extract";
 import { extractionModel } from "@/lib/extraction-model";
+import { groundCandidate } from "@/lib/grounding";
 import { extractionBatchRequested, inngest } from "../client";
 
 const INSERT_CHUNK = 100;
@@ -80,22 +81,18 @@ export const extractPageBatch = inngest.createFunction(
         parsedPages.flatMap((page) => page.lines.map((line) => [line.id, page] as const)),
       );
       const rows: NewAssertion[] = [];
-      let crossPage = 0;
+      let published = 0;
 
       for (const extracted of result.candidates) {
-        const citedPages = new Set(
-          extracted.candidate.evidence.lineIds.map((lineId) => pageByLineId.get(lineId)?.id),
-        );
-        citedPages.delete(undefined);
-        if (citedPages.size !== 1) {
-          crossPage += 1;
-          continue;
-        }
-
-        const page = parsedPages.find((item) => item.id === [...citedPages][0]);
+        const firstLineId = extracted.candidate.evidence.lineIds[0];
+        const page =
+          (firstLineId ? pageByLineId.get(firstLineId) : undefined) ??
+          parsedPages.find((item) => item.pageNumber === extracted.pageNumbers[0]);
         if (!page) continue;
         const lineById = new Map(page.lines.map((line) => [line.id, line]));
         const candidate = extracted.candidate;
+        const grounded = groundCandidate(candidate, { text: page.text, lines: page.lines });
+        if (grounded.status === "published") published += 1;
 
         rows.push({
           documentId,
@@ -104,8 +101,14 @@ export const extractPageBatch = inngest.createFunction(
           subject: candidate.subject,
           predicate: candidate.predicate,
           rawValue: candidate.rawValue,
-          unit: candidate.unit,
+          canonicalValue: grounded.canonicalValue,
+          canonicalNumber: grounded.canonicalNumber,
+          unit: grounded.unit,
           valueType: candidate.valueType,
+          normalizationRule: grounded.normalizationRule,
+          periodStart: grounded.period?.start,
+          periodEnd: grounded.period?.end,
+          periodPrecision: grounded.period?.precision,
           qualifiers: candidate.qualifiers,
           modality: candidate.modality,
           attributedTo: candidate.attributedTo,
@@ -119,11 +122,11 @@ export const extractPageBatch = inngest.createFunction(
               return line ? [line.bbox] : [];
             }),
           ),
-          verified: false,
-          contextComplete: false,
-          status: "rejected",
-          rejectionReason: "missing_context",
-          rejectionDetail: "candidate awaiting phase 05 grounding",
+          verified: grounded.verified,
+          contextComplete: grounded.contextComplete,
+          status: grounded.status,
+          rejectionReason: grounded.rejectionReason,
+          rejectionDetail: grounded.rejectionDetail,
           confidence: candidate.confidence,
           salience: extracted.salience,
           pipelineVersion,
@@ -141,7 +144,8 @@ export const extractPageBatch = inngest.createFunction(
           pages: parsedPages.length,
           candidates: result.candidates.length,
           stored: rows.length,
-          rejected: result.diagnostics.length + crossPage,
+          published,
+          rejected: rows.length - published,
         },
       });
       log.info(`extracted pages ${from + 1}-${to}`);
@@ -150,7 +154,8 @@ export const extractPageBatch = inngest.createFunction(
         pages: parsedPages.length,
         candidates: result.candidates.length,
         stored: rows.length,
-        rejected: result.diagnostics.length + crossPage,
+        published,
+        rejected: rows.length - published,
       };
     });
   },

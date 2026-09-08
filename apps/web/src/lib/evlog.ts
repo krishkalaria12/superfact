@@ -35,6 +35,7 @@ export type SuperfactFields = {
     pages: number;
     candidates: number;
     stored: number;
+    published: number;
     rejected: number;
   };
   /**

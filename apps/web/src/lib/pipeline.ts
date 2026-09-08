@@ -3,4 +3,4 @@
  * change to parsing, extraction, or adjudication makes earlier output non-comparable — that is
  * what invalidates reuse of a previous run over the same content hash.
  */
-export const PIPELINE_VERSION = "0.1.0";
+export const PIPELINE_VERSION = "0.2.0";

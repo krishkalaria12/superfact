@@ -158,13 +158,16 @@ export const runPipeline = inngest.createFunction(
               pages: total.pages + result.pages,
               candidates: total.candidates + result.candidates,
               stored: total.stored + result.stored,
+              published: total.published + result.published,
               rejected: total.rejected + result.rejected,
             }),
-            { pages: 0, candidates: 0, stored: 0, rejected: 0 },
+            { pages: 0, candidates: 0, stored: 0, published: 0, rejected: 0 },
           );
           const log = useLogger();
           log.set({ job: { ...job, stages: ["extract"] }, extract: summary });
-          log.info(`stored ${summary.stored} assertion candidates from ${summary.pages} pages`);
+          log.info(
+            `published ${summary.published} of ${summary.stored} assertions from ${summary.pages} pages`,
+          );
         });
         continue;
       }

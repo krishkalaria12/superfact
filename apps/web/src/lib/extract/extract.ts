@@ -122,6 +122,20 @@ export async function extractAssertionCandidates(
         diagnostics.push(
           diagnostic(work.id, "unknown_line_id", `candidate cited ${unknown.join(", ")}`),
         );
+        const converted = assertionCandidateSchema.parse({
+          ...modelCandidate,
+          source: work.tableCells ? "table" : "prose",
+          tableContext: null,
+          qualifiers: Object.fromEntries(
+            modelCandidate.qualifiers.map(({ key, value }) => [key, value]),
+          ),
+        });
+        candidates.push({
+          documentId: work.documentId,
+          pageNumbers: work.pageNumbers,
+          candidate: converted,
+          salience: computeSalience(converted, work.documentId, options.repetitionCorpus),
+        });
         continue;
       }
 
