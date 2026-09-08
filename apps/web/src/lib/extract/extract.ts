@@ -130,15 +130,25 @@ export async function extractAssertionCandidates(
   // prose sections and table cells is a hundred round trips, and doing them one at a time was the
   // single biggest thing standing between a page being parsed and its facts being on screen.
   const responses = await mapWithConcurrency(workItems, MODEL_CONCURRENCY, async (item) => {
+    const call = () =>
+      model.generate({
+        name: item.name,
+        system: EXTRACTION_SYSTEM_PROMPT,
+        prompt: item.prompt,
+        schema: modelCandidateListSchema,
+      });
+
     try {
-      return {
-        output: await model.generate({
-          name: item.name,
-          system: EXTRACTION_SYSTEM_PROMPT,
-          prompt: item.prompt,
-          schema: modelCandidateListSchema,
-        }),
-      };
+      return { output: await call() };
+    } catch {
+      // One more sampling before the batch gives up. A response the provider could not shape into
+      // the schema usually parses on a second attempt, and without this retry one flaky call out of
+      // several hundred fails a hundred-page document that had already extracted five thousand
+      // facts — which is what happened the first time this ran for real.
+    }
+
+    try {
+      return { output: await call() };
     } catch (error) {
       return { error };
     }
