@@ -256,3 +256,29 @@ test("compares canonical values and units without guessing", () => {
     "a number against an unnormalized string is not an agreement",
   );
 });
+
+test("bounds a whole run, keeping the best-scoring pairs and recording the rest", () => {
+  const focus = Array.from({ length: 6 }, (_, index) => assertion({ id: `f${index}` }));
+  const corpus = Array.from({ length: 6 }, (_, index) =>
+    assertion({ id: `t${index}`, documentId: "doc-b" }),
+  );
+
+  const result = buildCandidatePairs({
+    focus,
+    corpus,
+    retrieved: focus.flatMap((source) =>
+      corpus.map((target) => pair(source.id, target.id, "deterministic")),
+    ),
+    options: { maxPairs: 5 },
+  });
+
+  assert.equal(result.pairs.length, 5);
+  assert.equal(result.stats.pairs, 5);
+  const runCap = result.excluded.filter((entry) => entry.reason === "run_cap");
+  assert.ok(runCap.length > 0, "what the run cap cut is recorded, not dropped quietly");
+  assert.equal(
+    runCap.reduce((total, entry) => total + entry.count, 0) + 5,
+    36,
+    "every proposed pair is either kept or accounted for",
+  );
+});

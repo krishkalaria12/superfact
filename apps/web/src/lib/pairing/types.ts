@@ -61,7 +61,8 @@ export type PairingExclusionReason =
   | "value_mismatch"
   | "predicate"
   | "similarity_floor"
-  | "cap";
+  | "cap"
+  | "run_cap";
 
 /** One reason, aggregated per assertion, so a run's exclusions stay a summary rather than a dump. */
 export type PairingExclusion = {
@@ -91,6 +92,7 @@ export type PairingResult = {
 
 export type PairingOptions = {
   maxPairsPerAssertion?: number;
+  maxPairs?: number;
   minSemanticSimilarity?: number;
   minPredicateRelation?: number;
 };

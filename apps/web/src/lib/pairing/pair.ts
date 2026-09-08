@@ -23,6 +23,17 @@ export const DEFAULT_TOP_K = 20;
  */
 export const DEFAULT_MAX_PAIRS_PER_ASSERTION = 12;
 
+/**
+ * How many pairs one run may send to the adjudicator in total.
+ *
+ * The per-assertion cap bounds any one fact's fan-out; this bounds the run. A hundred-page filing
+ * yields well over a thousand published facts, and twelve pairs each is more model calls than any
+ * budget survives — so the run takes the best-scoring pairs and records the rest as `run_cap`
+ * exclusions. A run that keeps hitting this is a run whose adjudication is incomplete, and the
+ * count is in the stage's wide event for exactly that reason.
+ */
+export const DEFAULT_MAX_PAIRS = 400;
+
 /** Below this cosine similarity a vector neighbour is noise rather than the same claim reworded. */
 export const DEFAULT_MIN_SEMANTIC_SIMILARITY = 0.5;
 
@@ -97,6 +108,7 @@ export function buildCandidatePairs(input: {
   options?: PairingOptions;
 }): PairingResult {
   const maxPerAssertion = input.options?.maxPairsPerAssertion ?? DEFAULT_MAX_PAIRS_PER_ASSERTION;
+  const maxPairs = input.options?.maxPairs ?? DEFAULT_MAX_PAIRS;
   const minSimilarity = input.options?.minSemanticSimilarity ?? DEFAULT_MIN_SEMANTIC_SIMILARITY;
   const minRelation = input.options?.minPredicateRelation ?? DEFAULT_MIN_PREDICATE_RELATION;
 
@@ -198,15 +210,20 @@ export function buildCandidatePairs(input: {
     else kept.set(source.id, [candidate]);
   }
 
-  const pairs: CandidatePair[] = [];
+  const survivors: CandidatePair[] = [];
   for (const [assertionId, bucket] of kept) {
     bucket.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
     for (const cut of bucket.slice(maxPerAssertion)) {
       excluded.record(assertionId, "cap", cut.score);
     }
-    pairs.push(...bucket.slice(0, maxPerAssertion));
+    survivors.push(...bucket.slice(0, maxPerAssertion));
   }
-  pairs.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
+  survivors.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
+
+  const pairs = survivors.slice(0, maxPairs);
+  for (const cut of survivors.slice(maxPairs)) {
+    excluded.record(cut.sourceAssertionId, "run_cap", cut.score);
+  }
 
   return {
     pairs,
@@ -218,8 +235,8 @@ export function buildCandidatePairs(input: {
       deterministic: pairs.filter((pair) => pair.paths.includes("deterministic")).length,
       semantic: pairs.filter((pair) => pair.paths.includes("semantic")).length,
       pairs: pairs.length,
-      capped: excluded.countOf("cap"),
-      dropped: excluded.total - excluded.countOf("cap"),
+      capped: excluded.countOf("cap") + excluded.countOf("run_cap"),
+      dropped: excluded.total - excluded.countOf("cap") - excluded.countOf("run_cap"),
     },
   };
 }
