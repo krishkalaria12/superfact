@@ -1,17 +1,81 @@
 # Superfact
 
 An evidence-first fact knowledge layer for PDFs. It extracts atomic assertions, binds each one to
-the exact region of the page it came from, and identifies where facts corroborate, contradict, or
-only appear to contradict until you compare their context.
+the exact region of the page it came from, and works out where facts corroborate, contradict, or
+only look like they contradict until you compare their context.
 
 Built for the Superjoin engineering intern assignment (`docs/superjoin.pdf`). The implementation
-plan is `docs/implementation-plan.html`.
+plan is `docs/implementation-plan.html` and remains the source of truth for scope and sequencing.
 
-## Status
+## What it does
 
-Phase 00 complete. The workspaces, environment contracts, job table, and durable job spine are
-wired: a job moves through parse, extract, and relate as placeholder stages, and one job ID is
-visible in both the database and the logs. Parsing, extraction, and adjudication are not built.
+Upload a PDF. The system parses it into text with per-line geometry, reconstructs its tables from
+coordinates, extracts atomic claims, refuses any claim whose quote it cannot find on the page,
+normalizes the values that survive, and then asks how each new fact relates to everything already
+stored.
+
+The thing worth looking at is what it refuses. A fact is published only if a deterministic check
+finds its quote character-for-character in the stored page text and the lines it cites exist. A
+contradiction is published only if the values genuinely differ _and_ the time, scope, unit,
+modality, and attribution were all shown to be the same first — and then only if a second model
+pass, told to argue the two are reconcilable, fails to find a qualifier that does it.
+
+## Try it
+
+```bash
+pnpm install
+cp apps/web/.env.example apps/web/.env   # fill in DATABASE_URL, OPENAI_API_KEY, UPLOADTHING_TOKEN
+pnpm db:push
+pnpm dev
+```
+
+`pnpm dev` starts the app on http://localhost:3001 and the Inngest dev server on
+http://localhost:8288. Neither Inngest key is needed locally.
+
+Then drop a PDF on the home page. Facts appear while later pages are still being read. Six starter
+PDFs are in `docs/starter-datasets/`.
+
+| Where            | What                                                          |
+| ---------------- | ------------------------------------------------------------- |
+| `/`              | Upload, and every document with its coverage                  |
+| `/documents/:id` | Facts, relationships, and failures, with evidence on the page |
+| `/cases`         | The four assignment cases, selected from output by query      |
+| `/api/export`    | The whole run as JSON, validated against its own contract     |
+
+## How it works
+
+Three durable stages per document — parse, extract, relate — each idempotent, each fanned out into
+child function runs so no single request has to carry a long document.
+
+**Parse** is MuPDF.js in-process, no OCR and no second parser. It emits per-line geometry and a
+grayscale page raster at a recorded scale. Tables are reconstructed from coordinates rather than
+from ruling lines, because none of the starter documents draws its tables. Three rules earn their
+keep: split a page into column bands before clustering rows, so a two-up spread does not interleave;
+take column boundaries from body rows only, since headings span and data cells never do; and emit no
+rows at all for a ragged table, because a malformed grid attaches real numbers to the wrong header
+and the evidence gate cannot catch that — the quote is genuine.
+
+**Extract** runs densest page first. Parsing has already mapped the document, so extraction spends
+its early batches on pages with tables and summary headings, which is what puts real facts on screen
+while body prose is still going. The model proposes claims and cites line IDs; it is never asked for
+anything code can decide.
+
+**Ground** is where most candidates die, and that is the design. The verbatim gate looks for the
+quote in the stored page text. A context gate rejects a revenue figure with no period or a growth
+rate with no geography. Then normalization converts currencies, scales, percentages, units, and
+fiscal periods in code, never by model, keeping the raw value beside the canonical one and recording
+which rule did the conversion.
+
+**Relate** retrieves candidate pairs two ways and unions them. A deterministic path self-joins on
+equal canonical value — exact, because normalization already happened, which is why ₹7,225 crore and
+₹72.25 billion match here and are a coin flip in vector space. A semantic path does top-k over
+pgvector on subject and predicate text only; numbers never go through vectors. A pure, tested
+prefilter then decides which pairs are worth a model call, and it deliberately never drops a pair
+because time, unit, or scope differ — those differences are the reconciliations the next stage
+exists to explain.
+
+**Adjudicate** compares the pair in code first, then asks a model to interpret what code found. Code
+owns what differs; the model owns what it means and may only fill a gap code could not compare.
 
 ## Stack
 
@@ -27,69 +91,81 @@ visible in both the database and the logs. Parsing, extraction, and adjudication
 | Files   | UploadThing                                                                          |
 | UI      | Tailwind, shadcn/ui via `packages/ui`                                                |
 
-Everything runs in one TypeScript process. There is no Python service and no OCR.
+Everything runs in one TypeScript process. No Python service, no OCR, no second parser.
 
-## Setup
+## AI tools used
 
-```bash
-pnpm install
-```
+The code was written with Claude Code (Opus) working against `docs/implementation-plan.html`, phase
+by phase, with each phase's exit check run before the next began. The plan itself was drafted and
+then cut down hard: revision 1 had thirteen tables, seven verdicts, a Python parsing service, and an
+accuracy harness. Revision 2 has five tables, four verdicts, one parser, and no benchmark. The
+changelog at the bottom of the plan says why each thing went.
 
-Copy `apps/web/.env.example` to `apps/web/.env` and fill in a Neon connection string. Every other
-variable is optional until the phase that reads it — the example file says which.
+Three models run inside the product: `gpt-5.6-luna` extracts, `gpt-5.6-terra` adjudicates, and Terra
+at high reasoning effort runs the contradiction second pass. Escalation answers to exactly one
+condition — a first pass that said `contradicts` — rather than to a general risk score, which is
+what keeps the expensive call to tens of pairs instead of thousands.
 
-Apply the schema and start everything:
+## Limitations
 
-```bash
-pnpm db:push
-pnpm dev
-```
+**There is no measured accuracy, and no claim of any.** The plan cut gold sets, benchmark datasets,
+and evaluation phases deliberately: labelling a corpus well enough for the numbers to mean anything
+was more work than building the thing, and a number nobody can defend is worse than no number.
+Quality is judged by re-reading output over the same fixed starter pages after each change. That is
+a real weakness and the first thing I would fix with more time.
 
-`pnpm dev` runs the Next.js app on http://localhost:3001 and the Inngest dev server on
-http://localhost:8288. Neither Inngest key is needed locally.
+**Recall is traded away for precision, on purpose.** A large share of extracted candidates are
+refused, most often because a value could not be normalized or a claim lacked the context its
+predicate demands. Every refusal is stored with a reason code and visible in the failures view —
+none are silently dropped — but the system would rather publish nothing than publish a number it
+cannot stand behind.
 
-To watch a job move through the pipeline:
+**Scanned PDFs are refused outright.** There is no OCR. A document with no text layer is refused
+whole rather than half-parsed into assertions nothing can ground.
 
-```bash
-curl -X POST http://localhost:3001/api/dev/sample-job   # returns a job ID
-curl http://localhost:3001/api/dev/sample-job           # the ten most recent job rows
-```
+**A ragged table emits no rows.** When the geometry does not resolve into a clean grid, the band
+keeps its bounding box and its raster and produces nothing, because wrong numbers under the right
+header are worse than no numbers.
 
-Every wide event the run emits carries that job ID and the stages it covered, both on stdout and
-in `apps/web/.evlog/logs/`.
+**A failed run re-parses from scratch.** Page rows carry no pipeline version, so they cannot be told
+apart from a previous version's and are rebuilt. Re-uploading an already-processed file is cheap;
+resuming a half-finished one is not.
+
+**Chart-only pages produce nothing.** Vision extraction was cut. A page whose content is a chart the
+parser cannot read contributes no facts and reports as low-density in its page quality.
+
+## Next steps
+
+- A page-level pipeline version, so a failed run resumes instead of re-parsing.
+- Measured accuracy over a small hand-labelled slice, which would let the prefilter thresholds and
+  the similarity floor be tuned against something other than judgement.
+- Full-text search as a third retrieval path, but only after pairs are visibly being missed.
+- An HNSW index, but only after exact vector search is measurably slow.
 
 ## Layout
 
 ```
 superfact/
-├── apps/web/          # Next.js app: API routes, jobs, UI
-├── packages/db/       # Drizzle schema, client, and ORM re-exports
+├── apps/web/          # Next.js app: API routes, jobs, pipeline stages, UI
+├── packages/db/       # Drizzle schema, Zod contracts, projection, ORM re-exports
 ├── packages/env/      # Validated environment contracts
 ├── packages/ui/       # Shared shadcn/ui primitives
 ├── packages/config/   # Shared tsconfig base
+├── samples/           # Exported JSON and page images from a real run
 └── docs/              # Assignment, implementation plan, starter PDFs
 ```
 
+`AGENTS.md` is the working notes: invariants, what was deliberately left out, and the reasoning
+behind the parts that look odd.
+
 ## Scripts
 
-| Command                                | Does                        |
-| -------------------------------------- | --------------------------- |
-| `pnpm dev`                             | Start Next.js and Inngest   |
-| `pnpm dev:web`                         | Start only the web app      |
-| `pnpm build`                           | Build all workspaces        |
-| `pnpm check-types`                     | Typecheck across workspaces |
-| `pnpm check`                           | Oxlint + Oxfmt              |
-| `pnpm db:push`                         | Push schema to the database |
-| `pnpm db:studio`                       | Open Drizzle Studio         |
-| `pnpm db:generate` / `pnpm db:migrate` | Generate and run migrations |
-
-## Adding UI components
-
-Shared primitives live in `packages/ui`:
-
-```bash
-npx shadcn@latest add dialog table -c packages/ui
-```
-
-Import them as `@superfact/ui/components/button`. Run the shadcn CLI from `apps/web` instead when a
-component is app-specific rather than shared.
+| Command                  | Does                                                          |
+| ------------------------ | ------------------------------------------------------------- |
+| `pnpm dev`               | Start Next.js and the Inngest dev server                      |
+| `pnpm build`             | Build all workspaces                                          |
+| `pnpm check-types`       | Typecheck across workspaces                                   |
+| `pnpm check`             | Oxlint + Oxfmt                                                |
+| `pnpm --filter web test` | node:test over normalization, pairing, adjudication, priority |
+| `pnpm db:push`           | Push schema to the database                                   |
+| `pnpm db:studio`         | Open Drizzle Studio                                           |
