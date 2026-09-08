@@ -39,6 +39,18 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* Domain tokens. Evidence is the one saturated colour in the product and belongs to the plate
+     alone, so a highlight can never be mistaken for a verdict. The four verdicts sit apart from it
+     and from each other: conflict borrows destructive, reconciled gets the ochre because an
+     explained difference is the thing this system exists to show, agreement stays quiet, and
+     abstention is deliberately the dimmest thing on the screen. */
+  --evidence: oklch(0.55 0.17 245);
+  --evidence-wash: oklch(0.55 0.17 245 / 0.14);
+  --verdict-conflict: oklch(0.55 0.21 27);
+  --verdict-reconciled: oklch(0.58 0.13 72);
+  --verdict-agree: oklch(0.52 0.09 168);
+  --verdict-none: oklch(0.62 0 0);
 }
 
 .dark {
@@ -73,10 +85,16 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  --evidence: oklch(0.72 0.15 245);
+  --evidence-wash: oklch(0.72 0.15 245 / 0.2);
+  --verdict-conflict: oklch(0.7 0.19 25);
+  --verdict-reconciled: oklch(0.76 0.13 78);
+  --verdict-agree: oklch(0.72 0.1 168);
+  --verdict-none: oklch(0.58 0 0);
 }
 
 @theme inline {
-  --font-sans: "Inter Variable", sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -91,6 +109,14 @@
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
+  --color-evidence: var(--evidence);
+  --color-evidence-wash: var(--evidence-wash);
+  --color-verdict-conflict: var(--verdict-conflict);
+  --color-verdict-reconciled: var(--verdict-reconciled);
+  --color-verdict-agree: var(--verdict-agree);
+  --color-verdict-none: var(--verdict-none);
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, monospace;
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
@@ -123,8 +149,32 @@
   }
   body {
     @apply font-sans bg-background text-foreground;
+    /* Figures line up in columns without being asked to. Half this interface is numbers a reader
+       is comparing down a list, and proportional digits make that comparison harder. */
+    font-variant-numeric: tabular-nums;
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer utilities {
+  /* One pulse for one thing: a stage currently doing work. Nothing else moves on its own. */
+  @keyframes working {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+  .animate-working {
+    animation: working 1.6s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-working {
+      animation: none;
+    }
   }
 }
