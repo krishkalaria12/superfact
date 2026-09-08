@@ -66,6 +66,66 @@ test("takes a table currency from its governing unit line", () => {
   assert.equal(result.unit, "INR");
 });
 
+test("rejects a table value without its governing headers and unit", () => {
+  const tableLine = { id: "p1l7", text: "123" };
+  const result = groundCandidate(
+    candidate({
+      subject: "Unlabelled value",
+      predicate: "has value",
+      rawValue: "123",
+      unit: null,
+      valueType: "number",
+      qualifiers: {},
+      source: "table",
+      tableContext: {
+        title: null,
+        columnHeader: null,
+        rowHeader: null,
+        unitLine: null,
+        footnotes: [],
+      },
+      evidence: { quote: tableLine.text, lineIds: [tableLine.id] },
+    }),
+    { text: tableLine.text, lines: [tableLine] },
+  );
+
+  assert.equal(result.status, "rejected");
+  assert.equal(result.verified, true);
+  assert.equal(result.contextComplete, false);
+  assert.equal(result.rejectionReason, "missing_context");
+  assert.match(result.rejectionDetail ?? "", /table_title/);
+  assert.match(result.rejectionDetail ?? "", /table_column_header/);
+  assert.match(result.rejectionDetail ?? "", /table_row_header/);
+  assert.match(result.rejectionDetail ?? "", /table_unit/);
+});
+
+test("accepts a table unit stated directly on the candidate", () => {
+  const tableLine = { id: "p1l8", text: "42 employees" };
+  const result = groundCandidate(
+    candidate({
+      subject: "Engineering team",
+      predicate: "headcount",
+      rawValue: "42",
+      unit: "employees",
+      valueType: "number",
+      qualifiers: {},
+      source: "table",
+      tableContext: {
+        title: "Employee count",
+        columnHeader: "2024",
+        rowHeader: "Engineering",
+        unitLine: null,
+        footnotes: [],
+      },
+      evidence: { quote: tableLine.text, lineIds: [tableLine.id] },
+    }),
+    { text: tableLine.text, lines: [tableLine] },
+  );
+
+  assert.equal(result.status, "published");
+  assert.equal(result.contextComplete, true);
+});
+
 test("stores a quote failure instead of publishing it", () => {
   const result = groundCandidate(
     candidate({ evidence: { quote: "invented", lineIds: [line.id] } }),

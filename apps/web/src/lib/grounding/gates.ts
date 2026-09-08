@@ -22,7 +22,14 @@ export type GateDecision =
   | { verified: true; contextComplete: true; rejectionReason: null; rejectionDetail: null }
   | GateRejection;
 
-type ContextRequirement = "period" | "geography" | "segment";
+type ContextRequirement =
+  | "period"
+  | "geography"
+  | "segment"
+  | "table_title"
+  | "table_column_header"
+  | "table_row_header"
+  | "table_unit";
 
 const PERIOD_KEYS = /(?:^|_)(?:date|period|year|fiscal|fy|quarter|month|half_year)(?:_|$)/i;
 const GEOGRAPHY_KEYS =
@@ -125,6 +132,15 @@ function contextRequirements(candidate: AssertionCandidate): ContextRequirement[
   const claimText = `${candidate.subject} ${candidate.predicate}`;
   const scopeText = `${claimText} ${tableText(candidate.tableContext)}`;
 
+  if (candidate.source === "table") {
+    if (!candidate.tableContext?.title?.trim()) requirements.add("table_title");
+    if (!candidate.tableContext?.columnHeader?.trim()) requirements.add("table_column_header");
+    if (!candidate.tableContext?.rowHeader?.trim()) requirements.add("table_row_header");
+    if (!candidate.tableContext?.unitLine?.trim() && !candidate.unit?.trim()) {
+      requirements.add("table_unit");
+    }
+  }
+
   if (REVENUE_PREDICATE.test(claimText)) requirements.add("period");
   if (candidate.valueType === "percent" && GROWTH_PREDICATE.test(claimText)) {
     requirements.add("period");
@@ -168,7 +184,8 @@ export function checkContextGate(candidate: AssertionCandidate): GateRejection |
   const missing = contextRequirements(candidate).filter((requirement) => {
     if (requirement === "period") return !hasPeriod(candidate);
     if (requirement === "geography") return !hasGeography(candidate);
-    return !hasSegment(candidate);
+    if (requirement === "segment") return !hasSegment(candidate);
+    return true;
   });
   if (missing.length === 0) return null;
 
