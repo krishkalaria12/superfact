@@ -1,6 +1,8 @@
 import { env } from "@superfact/env/server";
 import { UTApi, UTFile } from "uploadthing/server";
 
+import { retryStorageRequest } from "./storage-retry.ts";
+
 /**
  * File storage, addressed by content rather than by whatever key UploadThing hands back.
  *
@@ -42,7 +44,9 @@ export type StoredObject = { key: string; url: string };
  * in UploadThing v9; when that lands this needs the replacement lookup, not a return to deleting.
  */
 async function findObject(customId: string): Promise<StoredObject | null> {
-  const { data } = await storage.getFileUrls([customId], { keyType: "customId" });
+  const { data } = await retryStorageRequest(() =>
+    storage.getFileUrls([customId], { keyType: "customId" }),
+  );
   const found = data[0];
   return found ? { key: found.key, url: found.url } : null;
 }
