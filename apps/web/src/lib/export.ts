@@ -9,7 +9,7 @@ import {
   toRejectedAssertion,
 } from "@superfact/db/projection";
 
-import { PIPELINE_VERSION } from "@/lib/pipeline";
+import { PIPELINE_VERSION } from "./pipeline.ts";
 
 /**
  * The JSON a reviewer downloads.

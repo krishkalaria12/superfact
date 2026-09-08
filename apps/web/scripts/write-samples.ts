@@ -23,11 +23,23 @@ async function write(relative: string, body: string | Uint8Array) {
   return relative;
 }
 
-const runExport = await buildExport();
+// Scoped to one document rather than the corpus. A full export runs to megabytes of JSON, which is
+// a worse artifact than a complete, readable export of one document: the shape is identical and a
+// reviewer can actually open it.
+const [smallest] = await db
+  .select()
+  .from(documents)
+  .where(eq(documents.status, "ready"))
+  .orderBy(documents.pageCount)
+  .limit(1);
+
+if (!smallest) throw new Error("no processed document to export; run the pipeline first");
+
+const runExport = await buildExport(smallest.id);
 await write("export.json", JSON.stringify(runExport, null, 2));
 console.info(
-  `export.json: ${runExport.facts.length} facts, ${runExport.edges.length} edges, ` +
-    `${runExport.failures.assertions.length} refused assertions`,
+  `export.json (${smallest.filename}): ${runExport.facts.length} facts, ` +
+    `${runExport.edges.length} edges, ${runExport.failures.assertions.length} refused assertions`,
 );
 
 await write("cases.json", JSON.stringify(await buildDemoCases(), null, 2));
