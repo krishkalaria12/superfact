@@ -16,7 +16,8 @@
     "db:generate": "turbo run db:generate -F @superfact/db --",
     "db:migrate": "turbo run db:migrate -F @superfact/db --",
     "check": "oxlint && oxfmt --write",
-    "prepare": "simple-git-hooks"
+    "prepare": "simple-git-hooks",
+    "samples": "turbo run samples -F web --"
   },
   "dependencies": {
     "@superfact/env": "workspace:*",

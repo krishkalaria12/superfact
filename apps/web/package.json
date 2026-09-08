@@ -9,7 +9,8 @@
     "build": "next build",
     "check-types": "tsc --noEmit",
     "test": "node --test src/lib/grounding/*.test.ts src/lib/pairing/*.test.ts src/lib/adjudication/*.test.ts src/lib/extract/*.test.ts",
-    "start": "next start"
+    "start": "next start",
+    "samples": "node --experimental-strip-types scripts/write-samples.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.60",

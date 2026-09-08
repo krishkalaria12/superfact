@@ -36,6 +36,9 @@
     "db:studio": {
       "cache": false,
       "persistent": true
+    },
+    "samples": {
+      "cache": false
     }
   }
 }
