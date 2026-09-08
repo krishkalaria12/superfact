@@ -16,6 +16,18 @@ import type { AdjudicationAssertion, DeterministicComparison } from "./types.ts"
 /** Doubles that came through the same normalizer are bit-identical; the slack is insurance. */
 const EQUALITY_EPSILON = 1e-9;
 
+/**
+ * How far apart two statements of one figure may be and still be a rounding difference.
+ *
+ * ₹1,270 crore and ₹1,266.41 crore are the same EBITDA reported to different precision, and calling
+ * that a conflict would be the system's worst failure mode: a confident contradiction over nothing.
+ * A difference this small is therefore neither matched nor mismatched — it is not evidence of
+ * agreement, and it is not evidence of conflict, so the pair goes to the model with the delta in
+ * front of it. Because `contradicts` requires `value` to be mismatched, a rounding-level difference
+ * can never be published as a contradiction.
+ */
+const ROUNDING_TOLERANCE = 0.005;
+
 /** Below this, two phrases are not describing the same thing. Tuned against the starter documents. */
 const RELATED_TEXT = 0.5;
 
@@ -110,10 +122,11 @@ function compareValue(
     const scale = Math.max(Math.abs(left.canonicalNumber), Math.abs(right.canonicalNumber), 1);
     const delta = Math.abs(left.canonicalNumber - right.canonicalNumber);
     const equal = delta <= EQUALITY_EPSILON * scale;
+    const relative = delta / scale;
     return {
-      verdict: equal ? "matched" : "mismatched",
+      verdict: equal ? "matched" : relative <= ROUNDING_TOLERANCE ? "unknown" : "mismatched",
       equal,
-      delta: delta / scale,
+      delta: relative,
       sameSign: Math.sign(left.canonicalNumber) === Math.sign(right.canonicalNumber),
     };
   }

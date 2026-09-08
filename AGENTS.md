@@ -144,6 +144,13 @@ Three rules there are load-bearing:
   adjudication budget and reconciles nothing. Each run pairs one document against everything else
   stored, so a cross-document pair is discovered once, by whichever document arrived second.
 
+Pairing is bounded twice. `DEFAULT_MAX_PAIRS_PER_ASSERTION` stops one fact fanning out;
+`DEFAULT_MAX_PAIRS` stops a run. A hundred-page filing publishes well over a thousand facts, and
+twelve pairs each is more model calls than any budget survives, so a run keeps the best-scoring
+pairs and records the rest as `run_cap` exclusions. Both counts land in the stage's wide event: a
+run that keeps hitting either is a run whose adjudication is incomplete, and that has to be visible
+rather than inferred from a quiet result.
+
 Pairs are never stored. They are an intermediate the `stage:relate:pairs` step computes and hands
 straight to the adjudicators, so the stage logs its counts and `GET /api/documents/:id/pairs`
 recomputes them on demand — two queries, no model call. Read `capped` and `dropped` in the log
@@ -267,6 +274,18 @@ stop polling. `?status=rejected` returns what the grounding gate refused, with r
 `GET /api/documents/:id/pairs` is the phase 06 exit check: it recomputes candidate pairing for one
 document and answers with each pair's two assertions in full, the retrieval paths that found it, and
 what the prefilter and the cap excluded. `limit` defaults to 100.
+
+`apps/web/src/lib/cases.ts` builds the four cases the assignment asks to see, and every one is a
+query. Nothing in it names a filename, a predicate, a subject, or a value: the four are picked by
+the shape of the result, so pointing the system at unseen PDFs either fills them in or reports
+plainly that it found none. An empty case is the honest answer and must stay one — staging an
+example there would be exactly the demo-overfitting the plan's risk register names. `/cases`
+renders them and `GET /api/cases` returns them.
+
+`pnpm samples` writes `samples/` from whatever is currently in the database: an export scoped to the
+smallest processed document, the four cases, and one page raster per document — the page carrying
+the most published facts. It is scoped rather than complete because a whole-corpus export runs to
+megabytes, and a readable export of one document has the same shape.
 
 `GET /api/export` is the JSON a reviewer downloads, for the corpus or one document with
 `?documentId=`. It is parsed against `runExportSchema` before it is served, so a projection that

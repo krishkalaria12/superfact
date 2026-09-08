@@ -18,6 +18,7 @@ Choose exactly one verdict:
 - reconciles: the claims look opposed but a difference of time, data vintage, unit, scope, or projection-versus-actual explains both.
 - insufficient: the decisive context needed to compare them is missing from one side or both. Return this rather than guessing.
 Differing numbers alone are never enough for contradicts. Say what makes the two comparable before you say they conflict.
+When relativeDifference is tiny and value is listed under notComparable, the two figures are the same number reported to different precision. That is corroboration, not conflict.
 Write a short comparison a reader can check against the two quotes. Never reveal your reasoning process.`;
 
 export const CONTRADICTION_REVIEW_SYSTEM_PROMPT = `You review a pair that a first pass called a contradiction, and the burden is now reversed.

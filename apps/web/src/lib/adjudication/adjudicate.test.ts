@@ -356,3 +356,29 @@ test("settles two unqualified claims, which have no scope to disagree about", ()
 
   assert.equal(compareAssertions(source, target).settled?.verdict, "corroborates");
 });
+
+test("reads a rounded restatement as neither agreement nor conflict", () => {
+  // ₹1,270 crore and ₹1,266.41 crore are one EBITDA at two precisions. Calling that a conflict is
+  // the worst thing the system could do, so `value` lands in neither list and a contradiction
+  // becomes unreachable for this pair.
+  const rounded = assertion({ canonicalNumber: 1_270_000_000, canonicalValue: "1270000000" });
+  const precise = assertion({
+    documentId: "doc-b",
+    canonicalNumber: 1_266_410_000,
+    canonicalValue: "1266410000",
+  });
+
+  const comparison = compareAssertions(rounded, precise);
+
+  assert.ok(comparison.unknown.includes("value"));
+  assert.ok(!comparison.mismatched.includes("value"));
+  assert.equal(comparison.settled, null, "a rounding difference is still worth asking about");
+  assert.ok(comparison.relativeDelta! < 0.005);
+});
+
+test("still calls a real difference a difference", () => {
+  const a = assertion({ canonicalNumber: 100, canonicalValue: "100" });
+  const b = assertion({ documentId: "doc-b", canonicalNumber: 120, canonicalValue: "120" });
+
+  assert.ok(compareAssertions(a, b).mismatched.includes("value"));
+});
