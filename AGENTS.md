@@ -245,6 +245,19 @@ it means a column; nothing in the plan's exit checks needs it yet.
 an error — refusing a scan is the system working. `GET /api/documents/:id` and `GET /api/jobs/:id`
 are read-only and both report per-page coverage.
 
+`apps/web/src/components` is the inspection workspace. `/` is upload plus the document list; a
+document opens on `/documents/[id]` as a list-and-inspector split — facts, relationships, and
+failures on the left, the selected thing with its evidence on the right. It polls the JSON APIs and
+stops when `progress.job` goes null, rather than holding a socket: facts land in the database batch
+by batch anyway, so a request every couple of seconds shows the same progressive fill.
+
+`evidence-viewer.tsx` is where the coordinate-space decision pays off. It draws the parser's boxes
+straight onto the stored raster, scaled by the `rasterScale` on that page's row — read from the row,
+never assumed, so a page rendered before the constant changed still highlights correctly. It draws
+per-line boxes rather than only their union, because a quote spanning three lines should read as
+three highlights. A table fact shows its governing title, headers, unit line, and footnotes beside
+the highlight, since the box alone is around a bare number and means nothing without them.
+
 `GET /api/documents/:id/facts` answers mid-run, which is the point of it. Each extraction batch
 commits its rows as it finishes, so a client polling this watches facts arrive while later pages are
 still being read. `progress` travels in the same response because forty facts means something
@@ -254,6 +267,12 @@ stop polling. `?status=rejected` returns what the grounding gate refused, with r
 `GET /api/documents/:id/pairs` is the phase 06 exit check: it recomputes candidate pairing for one
 document and answers with each pair's two assertions in full, the retrieval paths that found it, and
 what the prefilter and the cap excluded. `limit` defaults to 100.
+
+`GET /api/export` is the JSON a reviewer downloads, for the corpus or one document with
+`?documentId=`. It is parsed against `runExportSchema` before it is served, so a projection that
+started losing a field fails loudly here instead of shipping a plausible file with a hole in it.
+`GET /api/documents/:id/pages/:n` serves one page's raster URL, scale, and line geometry for the
+viewer.
 
 `GET /api/documents/:id/edges` is the phase 07 exit check: every judged relationship touching the
 document, contradictions first, each with both claims attached and the fields that matched and did

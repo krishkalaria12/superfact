@@ -1,5 +1,9 @@
+import { db, documents } from "@superfact/db";
+import { desc } from "@superfact/db/orm";
+
 import { intake, MAX_UPLOAD_BYTES } from "@/lib/documents";
 import { createError, useLogger, withEvlog } from "@/lib/evlog";
+import { readDocumentTotals } from "@/lib/export";
 
 /**
  * The only way a document enters the system.
@@ -63,5 +67,27 @@ export const POST = withEvlog(async (request: Request) => {
       failureReason: document.failureReason,
       failureDetail: document.failureDetail,
     },
+  });
+});
+
+/** Read-only: every document the system has seen, newest first, with its fact counts. */
+export const GET = withEvlog(async () => {
+  const rows = await db.select().from(documents).orderBy(desc(documents.createdAt));
+  const totals = await readDocumentTotals(rows.map((row) => row.id));
+
+  return Response.json({
+    documents: rows.map((row) => ({
+      id: row.id,
+      filename: row.filename,
+      contentHash: row.contentHash,
+      byteSize: row.byteSize,
+      pageCount: row.pageCount,
+      status: row.status,
+      failureReason: row.failureReason,
+      failureDetail: row.failureDetail,
+      pipelineVersion: row.pipelineVersion,
+      createdAt: row.createdAt,
+      facts: totals.get(row.id) ?? { published: 0, rejected: 0 },
+    })),
   });
 });
