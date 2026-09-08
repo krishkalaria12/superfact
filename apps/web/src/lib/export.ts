@@ -1,6 +1,6 @@
 import { assertions, db, documents, edges, pages } from "@superfact/db";
 import type { RunExport } from "@superfact/db/contracts";
-import { eq, getTableColumns, inArray, or } from "@superfact/db/orm";
+import { and, eq, getTableColumns, inArray, isNull, or, sql } from "@superfact/db/orm";
 import {
   buildRunExport,
   toClaimEdge,
@@ -25,9 +25,16 @@ import { PIPELINE_VERSION } from "./pipeline.ts";
 const { embedding: _embedding, ...assertionColumns } = getTableColumns(assertions);
 
 export async function buildExport(documentId?: string): Promise<RunExport> {
+  const currentDocument = or(
+    eq(documents.pipelineVersion, PIPELINE_VERSION),
+    and(eq(documents.status, "failed"), isNull(documents.pipelineVersion)),
+  );
   const documentRows = documentId
-    ? await db.select().from(documents).where(eq(documents.id, documentId))
-    : await db.select().from(documents).orderBy(documents.createdAt);
+    ? await db
+        .select()
+        .from(documents)
+        .where(and(eq(documents.id, documentId), currentDocument))
+    : await db.select().from(documents).where(currentDocument).orderBy(documents.createdAt);
 
   const ids = documentRows.map((row) => row.id);
   if (ids.length === 0) {
@@ -55,7 +62,9 @@ export async function buildExport(documentId?: string): Promise<RunExport> {
   const assertionRows = await db
     .select(assertionColumns)
     .from(assertions)
-    .where(inArray(assertions.documentId, ids));
+    .where(
+      and(inArray(assertions.documentId, ids), eq(assertions.pipelineVersion, PIPELINE_VERSION)),
+    );
 
   const assertionIds = assertionRows.map((row) => row.id);
   const edgeRows =
@@ -65,9 +74,12 @@ export async function buildExport(documentId?: string): Promise<RunExport> {
           .select()
           .from(edges)
           .where(
-            or(
-              inArray(edges.sourceAssertionId, assertionIds),
-              inArray(edges.targetAssertionId, assertionIds),
+            and(
+              eq(edges.pipelineVersion, PIPELINE_VERSION),
+              or(
+                inArray(edges.sourceAssertionId, assertionIds),
+                inArray(edges.targetAssertionId, assertionIds),
+              ),
             ),
           );
 
@@ -113,17 +125,19 @@ export async function readDocumentTotals(documentIds: readonly string[]) {
   if (documentIds.length === 0) return new Map<string, { published: number; rejected: number }>();
 
   const rows = await db
-    .select({ documentId: assertions.documentId, status: assertions.status, id: assertions.id })
+    .select({
+      documentId: assertions.documentId,
+      published: sql<number>`count(*) filter (where ${assertions.status} = 'published')::int`,
+      rejected: sql<number>`count(*) filter (where ${assertions.status} = 'rejected')::int`,
+    })
     .from(assertions)
-    .where(inArray(assertions.documentId, [...documentIds]));
+    .where(inArray(assertions.documentId, [...documentIds]))
+    .groupBy(assertions.documentId);
 
   const totals = new Map<string, { published: number; rejected: number }>();
   for (const id of documentIds) totals.set(id, { published: 0, rejected: 0 });
   for (const row of rows) {
-    const entry = totals.get(row.documentId);
-    if (!entry) continue;
-    if (row.status === "published") entry.published += 1;
-    else entry.rejected += 1;
+    totals.set(row.documentId, { published: row.published, rejected: row.rejected });
   }
   return totals;
 }

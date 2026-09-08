@@ -108,7 +108,10 @@ export const runPipeline = inngest.createFunction(
 
       if (!row) throw new Error(`no job ${jobId}`);
 
-      await db.update(documents).set({ status: "parsing" }).where(eq(documents.id, row.documentId));
+      await db
+        .update(documents)
+        .set({ status: "parsing", pipelineVersion: row.pipelineVersion })
+        .where(eq(documents.id, row.documentId));
 
       const log = useLogger();
       log.set({
