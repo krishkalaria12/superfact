@@ -60,3 +60,6 @@ temp
 # Assignment material (large binaries, not ours to redistribute)
 docs/*.pdf
 docs/starter-datasets/
+
+# Agent worktrees
+.claude/
