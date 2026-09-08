@@ -1,7 +1,7 @@
 import { assertions, db, documents, edges } from "@superfact/db";
 import type { EdgeVerdict } from "@superfact/db";
 import { edgeVerdict } from "@superfact/db";
-import { desc, eq, getTableColumns, inArray, or } from "@superfact/db/orm";
+import { eq, getTableColumns, inArray, or, sql } from "@superfact/db/orm";
 import { toClaimEdge, toPublishedAssertion } from "@superfact/db/projection";
 
 import { createError, withEvlog } from "@/lib/evlog";
@@ -58,7 +58,9 @@ export const GET = withEvlog(
           inArray(edges.targetAssertionId, documentAssertions),
         ),
       )
-      .orderBy(desc(edges.confidence));
+      // Nulls last: Postgres sorts them first on a descending order, which would float every
+      // unscored edge above the ones the adjudicator was most sure of.
+      .orderBy(sql`${edges.confidence} desc nulls last`);
 
     const claimEdges = rows
       .map(toClaimEdge)

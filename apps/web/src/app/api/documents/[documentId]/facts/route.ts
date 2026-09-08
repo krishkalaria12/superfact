@@ -1,5 +1,5 @@
 import { assertions, db, documents, jobs } from "@superfact/db";
-import { and, count, desc, eq, getTableColumns, inArray } from "@superfact/db/orm";
+import { and, count, desc, eq, getTableColumns, inArray, sql } from "@superfact/db/orm";
 import { toRejectedAssertion, toPublishedAssertion } from "@superfact/db/projection";
 
 import { readCoverage } from "@/lib/documents";
@@ -58,8 +58,13 @@ export const GET = withEvlog(
       .from(assertions)
       .where(scope)
       // Salience first, then the extractor's own confidence. Neither ever decided a verdict;
-      // ranking the list is the only thing they are for.
-      .orderBy(desc(assertions.salience), desc(assertions.confidence), assertions.pageNumber)
+      // ranking the list is the only thing they are for. NULLS LAST because Postgres sorts nulls
+      // first on a descending order, which would put every unscored fact at the top of the list.
+      .orderBy(
+        sql`${assertions.salience} desc nulls last`,
+        sql`${assertions.confidence} desc nulls last`,
+        assertions.pageNumber,
+      )
       .limit(limit)
       .offset(offset);
 

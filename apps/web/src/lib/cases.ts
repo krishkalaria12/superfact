@@ -1,7 +1,7 @@
 import { assertions, db, documents, edges, pages } from "@superfact/db";
 import type { PublishedAssertion, RejectedAssertion } from "@superfact/db/contracts";
 import type { SQL } from "@superfact/db/orm";
-import { and, desc, eq, getTableColumns, inArray, isNotNull, ne, sql } from "@superfact/db/orm";
+import { and, eq, getTableColumns, inArray, isNotNull, ne, sql } from "@superfact/db/orm";
 import { toClaimEdge, toPublishedAssertion, toRejectedAssertion } from "@superfact/db/projection";
 
 import type { EdgeWithSides } from "./api.ts";
@@ -39,7 +39,14 @@ async function readSides(ids: readonly string[]) {
 }
 
 async function firstEdge(where: SQL | undefined): Promise<EdgeWithSides | null> {
-  const [row] = await db.select().from(edges).where(where).orderBy(desc(edges.confidence)).limit(1);
+  const [row] = await db
+    .select()
+    .from(edges)
+    .where(where)
+    // Nulls last, so the example shown is one the adjudicator was actually confident about;
+    // Postgres would otherwise sort unscored edges to the front of a descending order.
+    .orderBy(sql`${edges.confidence} desc nulls last`)
+    .limit(1);
   if (!row) return null;
 
   const edge = toClaimEdge(row);
