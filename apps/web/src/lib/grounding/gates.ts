@@ -40,6 +40,23 @@ const GEOGRAPHIC_SCOPE =
   /\b(?:geograph(?:y|ic|ical)|region(?:al)?|countr(?:y|ies)|territor(?:y|ies)|location|by market)\b/i;
 const SEGMENT_SCOPE = /\b(?:segment(?:al)?|division|business unit|product line|reportable unit)\b/i;
 
+/**
+ * Runs of whitespace become one space, on both sides of the comparison.
+ *
+ * This is the only latitude the verbatim gate gives, and it is not latitude about content. MuPDF
+ * emits a "line" per text run, so a single printed sentence often arrives as the fragments "Fresh",
+ * "issue", "of", "82,152,503*" — and a model asked to quote it writes the sentence, while the
+ * stored page text joins those fragments with newlines. Comparing raw rejected three thousand
+ * quotes that were genuinely on the page, which is the gate failing at its own job: it exists to
+ * catch invention, and a line break is a layout artifact rather than something a document said.
+ *
+ * Nothing else is relaxed. No case folding, no punctuation stripping, no fuzzy or partial match —
+ * the words still have to appear on the page, in that order, spelled that way.
+ */
+function collapseWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 function normalizedEntries(qualifiers: Qualifiers): [string, string][] {
   return Object.entries(qualifiers).map(([key, value]) => [
     key
@@ -135,7 +152,7 @@ export function checkVerbatimGate(
     };
   }
 
-  if (!page.text.includes(candidate.evidence.quote)) {
+  if (!collapseWhitespace(page.text).includes(collapseWhitespace(candidate.evidence.quote))) {
     return {
       verified: false,
       contextComplete: false,

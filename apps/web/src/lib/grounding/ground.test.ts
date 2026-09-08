@@ -199,3 +199,42 @@ test("normalizes a fiscal period used as the assertion value", () => {
     precision: "fiscal_year",
   });
 });
+
+test("accepts a quote whose words are split across parser line fragments", () => {
+  // MuPDF hands back a text run per line, so one printed sentence arrives as fragments. The model
+  // quotes the sentence; the stored page text joins the fragments with newlines. Both say the same
+  // thing and the gate has to see that, or it rejects genuine evidence for a layout artifact.
+  const fragments = [
+    { id: "p1l1", text: "Fresh" },
+    { id: "p1l2", text: "issue of" },
+    { id: "p1l3", text: "₹40,000.00 million" },
+  ];
+  const result = groundCandidate(
+    candidate({
+      subject: "Fresh issue",
+      predicate: "aggregates to",
+      rawValue: "₹40,000.00 million",
+      unit: "INR",
+      qualifiers: { fiscal_year: "FY2024" },
+      evidence: {
+        quote: "Fresh issue of ₹40,000.00 million",
+        lineIds: ["p1l1", "p1l2", "p1l3"],
+      },
+    }),
+    { text: fragments.map((line) => line.text).join("\n"), lines: fragments },
+  );
+
+  assert.equal(result.verified, true);
+  assert.notEqual(result.rejectionReason, "quote_not_found");
+});
+
+test("still refuses a quote whose words are not on the page", () => {
+  const fragments = [{ id: "p1l1", text: "Revenue rose" }];
+  const result = groundCandidate(
+    candidate({ evidence: { quote: "Revenue fell", lineIds: ["p1l1"] } }),
+    { text: "Revenue rose", lines: fragments },
+  );
+
+  assert.equal(result.status, "rejected");
+  assert.equal(result.rejectionReason, "quote_not_found");
+});

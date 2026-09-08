@@ -198,3 +198,27 @@ test("takes the calendar a document uses most when it names several", () => {
 
   assert.deepEqual(day, { month: 3, day: 31 });
 });
+
+test("accepts a document-named unit that the span plainly states", () => {
+  // The span mentions a currency and a count in the same breath. Resolving the span to INR and then
+  // calling "Equity Shares" absent from it was the check contradicting the text in front of it.
+  const result = verifyValueInSource({
+    rawValue: "9,324,309",
+    valueType: "number",
+    unit: "Equity Shares",
+    sourceSpan: "9,324,309 Equity Shares aggregating to ₹4,540 million",
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test("still refuses a unit the span never mentions", () => {
+  const result = verifyValueInSource({
+    rawValue: "9,324,309",
+    valueType: "number",
+    unit: "Preference Shares",
+    sourceSpan: "9,324,309 Equity Shares aggregating to ₹4,540 million",
+  });
+
+  assert.equal(result.ok, false);
+});

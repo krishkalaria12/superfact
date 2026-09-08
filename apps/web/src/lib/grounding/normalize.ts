@@ -577,6 +577,25 @@ export function normalizePeriod(
   return fail(`unsupported date or period ${JSON.stringify(value)}`);
 }
 
+/**
+ * Whether the evidence span actually shows the unit the claim asserts.
+ *
+ * Two ways to satisfy it, because units come from two places. A unit the normalizer recognizes —
+ * a currency, a percentage, a kilogram — has to be the unit the span resolves to. A unit the
+ * document named itself, like "Equity Shares", is not in any alias table, so the check is simply
+ * whether the span says it.
+ *
+ * The second path exists because the first one lied. `detectUnit` returns a currency the moment it
+ * sees one anywhere in the text, so a span reading "9,324,309 Equity Shares aggregating to ₹4,540
+ * million" resolved to INR and reported "Equity Shares" as absent — from a span containing those
+ * exact words.
+ */
+function unitInSource(claimedUnit: string, source: string): boolean {
+  if (detectUnit(source, null) === claimedUnit) return true;
+  const needle = claimedUnit.toLowerCase().replace(/\s+/g, " ").trim();
+  return needle.length > 0 && source.toLowerCase().replace(/\s+/g, " ").includes(needle);
+}
+
 /** Checks the claimed scalar's source-sensitive tokens against the complete evidence span. */
 export function verifyValueInSource(input: {
   rawValue: string;
@@ -686,7 +705,7 @@ export function verifyValueInSource(input: {
     !claimedCurrency &&
     claimedUnit &&
     claimedUnit !== "percent" &&
-    detectUnit(source, null) !== claimedUnit
+    !unitInSource(claimedUnit, source)
   ) {
     return {
       ok: false,
