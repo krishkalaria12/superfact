@@ -169,8 +169,8 @@ parser cannot read contributes no facts and reports as low-density in its page q
 
 ## Video demo
 
-Not recorded. The system runs locally from the instructions above, and `samples/` holds real output
-so its behaviour can be read without credentials.
+To be recorded. `samples/` holds real export data and page images so the behaviour can still be
+reviewed without credentials.
 
 ## Additional notes
 
