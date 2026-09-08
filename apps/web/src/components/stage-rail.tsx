@@ -1,6 +1,6 @@
 "use client";
 
-import type { JobStage } from "@superfact/db";
+import type { DocumentStatus, JobStage } from "@superfact/db";
 import { cn } from "@superfact/ui/lib/utils";
 
 import type { Progress } from "@/lib/api";
@@ -25,22 +25,47 @@ export type StageCounts = {
 
 const ORDER: JobStage[] = ["parse", "extract", "relate"];
 
+type State = "waiting" | "working" | "done" | "stopped";
+
+const LABEL: Record<State, string> = {
+  waiting: "queued",
+  working: "running",
+  done: "done",
+  stopped: "never ran",
+};
+
 const DESCRIPTION: Record<JobStage, string> = {
   parse: "Reading pages, rebuilding tables, rendering images",
   extract: "Pulling out claims and checking each quote against its page",
   relate: "Comparing new facts against everything already stored",
 };
 
-type State = "waiting" | "working" | "done";
+/**
+ * What a stage is doing, or did.
+ *
+ * With a job running the answer comes from the job. With no job it has to come from the output,
+ * because a run that stopped partway still did real work: a document that failed during extraction
+ * has read all its pages, and showing parse as "queued" contradicts the ninety-four pages counted
+ * right beside it. So a stage that produced something reads done, and a stage that never got its
+ * turn reads stopped rather than queued — nothing is coming for it.
+ */
+function stateOf(
+  stage: JobStage,
+  active: JobStage | null,
+  status: DocumentStatus,
+  produced: Record<JobStage, boolean>,
+): State {
+  if (active) {
+    const here = ORDER.indexOf(stage);
+    const now = ORDER.indexOf(active);
+    if (here < now) return "done";
+    if (here === now) return "working";
+    return "waiting";
+  }
 
-function stateOf(stage: JobStage, active: JobStage | null, finished: boolean): State {
-  if (finished) return "done";
-  if (!active) return "waiting";
-  const here = ORDER.indexOf(stage);
-  const now = ORDER.indexOf(active);
-  if (here < now) return "done";
-  if (here === now) return "working";
-  return "waiting";
+  if (status === "ready") return "done";
+  if (status === "failed") return produced[stage] ? "done" : "stopped";
+  return produced[stage] ? "done" : "waiting";
 }
 
 /**
@@ -71,16 +96,20 @@ export function StageRailSkeleton() {
 export function StageRail({
   progress,
   counts,
-  documentFinished,
+  documentStatus,
 }: {
   progress: Progress;
   counts: StageCounts;
-  documentFinished: boolean;
+  documentStatus: DocumentStatus;
 }) {
   const active = progress.job?.stage ?? null;
-  const running = progress.job !== null;
   const total = progress.pageCount ?? 0;
   const read = progress.pagesParsed + progress.pagesFailed;
+  const produced: Record<JobStage, boolean> = {
+    parse: read > 0,
+    extract: counts.facts + counts.refused > 0,
+    relate: counts.links > 0,
+  };
 
   const measures: Record<JobStage, string> = {
     parse: total > 0 ? `${progress.pagesParsed} of ${total} pages` : "waiting for a page count",
@@ -92,12 +121,12 @@ export function StageRail({
     <section aria-label="Run progress" className="border-border border-y bg-muted/30">
       <div className="mx-auto grid max-w-350 gap-px bg-border sm:grid-cols-3">
         {ORDER.map((stage) => {
-          const state = stateOf(stage, active, documentFinished && !running);
+          const state = stateOf(stage, active, documentStatus, produced);
           return (
             <div
               className={cn(
                 "bg-background px-4 py-3",
-                state === "waiting" && "text-muted-foreground",
+                (state === "waiting" || state === "stopped") && "text-muted-foreground",
               )}
               key={stage}
             >
@@ -110,13 +139,15 @@ export function StageRail({
                 >
                   {stage}
                 </span>
-                <span className="font-mono text-xs">
-                  {state === "waiting" ? "queued" : state === "working" ? "running" : "done"}
+                <span
+                  className={cn("font-mono text-xs", state === "stopped" && "text-destructive")}
+                >
+                  {LABEL[state]}
                 </span>
               </div>
 
               <p className="mt-1 truncate text-xs">
-                {state === "waiting" ? DESCRIPTION[stage] : measures[stage]}
+                {state === "waiting" || state === "stopped" ? DESCRIPTION[stage] : measures[stage]}
               </p>
 
               {stage === "parse" && total > 0 ? (
@@ -136,7 +167,7 @@ export function StageRail({
                   className={cn(
                     "mt-2 h-1 w-full",
                     state === "done" ? "bg-foreground" : "bg-border",
-                    state === "working" && "bg-evidence animate-working",
+                    state === "working" && "animate-working bg-evidence",
                   )}
                 />
               )}

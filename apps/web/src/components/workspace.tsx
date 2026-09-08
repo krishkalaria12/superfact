@@ -166,8 +166,7 @@ export function Workspace({ documentId }: { documentId: string }) {
 
   // A refused document and an unreadable page are failures the same way a refused claim is, and
   // the tab counts all three. Anything else would let a document that failed whole read as clean.
-  const structural =
-    (details?.document.failureReason ? 1 : 0) + (details?.failedPages.length ?? 0);
+  const structural = (details?.document.failureReason ? 1 : 0) + (details?.failedPages.length ?? 0);
 
   // Switching tabs clears the selection: a fact stays open while the list beneath it changes to
   // relationships otherwise, which reads as the two panes having come apart.
@@ -189,7 +188,7 @@ export function Workspace({ documentId }: { documentId: string }) {
             refused: refused?.total ?? 0,
             links: links?.total ?? 0,
           }}
-          documentFinished={facts.document.status === "ready"}
+          documentStatus={facts.document.status}
           progress={facts.progress}
         />
       )}
